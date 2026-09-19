@@ -48,7 +48,7 @@ The mic needs a secure context, which both `localhost` and Vercel's HTTPS satisf
 
 | Key | Action |
 | --- | --- |
-| Space (hold), or right mouse button (hold) | Push to talk |
+| Space (hold), right mouse button (hold), or finger on screen (hold, show mode) | Push to talk |
 | E | Toggle edit mode (panel, HUD, log, cursor) |
 | T | Toggle test pattern (grid, crosshair, circle, orientation marks) |
 | F | Toggle fullscreen |
@@ -64,6 +64,10 @@ The mic needs a secure context, which both `localhost` and Vercel's HTTPS satisf
 | Ctrl+1–3 / Alt+1–3 | Save / load preset slot |
 
 Config autosaves to localStorage 500 ms after any change and restores on reload.
+
+## On a phone
+
+The same URL works on a phone or tablet: tap Start, then hold a finger anywhere on the screen to talk. Editing is still possible (the panel is cramped) but the phone is mainly a handy way to demo the agent without the projector. iOS ignores fullscreen requests; add the page to the home screen for a full-screen face.
 
 ## Aligning to the mask
 

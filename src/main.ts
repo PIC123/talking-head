@@ -177,14 +177,21 @@ window.addEventListener('keyup', (e) => {
 });
 // Never leave the mic open if the key-up is lost (window blur, fullscreen change).
 window.addEventListener('blur', () => session.releaseTalk());
-// Pointer-based talk button for touch screens / a mouse-only clicker: hold the right mouse button.
+// Pointer-based talk: hold the right mouse button (presenter clicker), or on a touch screen
+// hold a finger anywhere in show mode. Edit mode keeps touch free for the panel and handles.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
+const isTouchTalk = (e: PointerEvent) => e.pointerType === 'touch' && !editMode;
 window.addEventListener('pointerdown', (e) => {
-  if (e.button === 2) session.pressTalk();
+  if (e.button === 2 || isTouchTalk(e)) {
+    if (isTouchTalk(e)) e.preventDefault();
+    session.pressTalk();
+  }
 });
-window.addEventListener('pointerup', (e) => {
-  if (e.button === 2) session.releaseTalk();
-});
+const releaseIfTalk = (e: PointerEvent) => {
+  if (e.button === 2 || e.pointerType === 'touch') session.releaseTalk();
+};
+window.addEventListener('pointerup', releaseIfTalk);
+window.addEventListener('pointercancel', releaseIfTalk);
 
 // ---------------- Render loop
 let last = performance.now();
