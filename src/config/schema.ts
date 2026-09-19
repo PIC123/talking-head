@@ -1,5 +1,6 @@
 export type Provider = 'elevenlabs' | 'micloop' | 'echo';
 export type TurnMode = 'pushToTalk' | 'openMic';
+export type Connection = 'auto' | 'webrtc' | 'websocket';
 
 export interface Config {
   version: number;
@@ -7,6 +8,8 @@ export interface Config {
     provider: Provider;
     agentId: string;
     turnMode: TurnMode;
+    /** Transport: auto tries WebRTC and falls back to WebSocket if it drops within seconds. */
+    connection: Connection;
     /** End the provider session after this much silence from both sides. */
     sessionIdleTimeoutSec: number;
     /** Connect as soon as the Start overlay is dismissed (else on first talk press). */
@@ -90,6 +93,7 @@ export const defaultConfig = (): Config => ({
     provider: 'micloop',
     agentId: '',
     turnMode: 'pushToTalk',
+    connection: 'auto',
     sessionIdleTimeoutSec: 45,
     connectOnStart: false,
   },

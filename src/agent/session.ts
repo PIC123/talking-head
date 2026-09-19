@@ -22,6 +22,9 @@ export class SessionManager {
   private agentState: AgentState = 'disconnected';
   private personaPrompt: string | undefined;
   private stateCb: (s: AgentState) => void = () => {};
+  /** Set once WebRTC failed fast in 'auto' mode; later sessions use WebSocket. */
+  private wsFallback = false;
+  private connectedAt = -1;
 
   constructor(
     private getConfig: () => Config,
@@ -118,6 +121,8 @@ export class SessionManager {
           agentId: c.agentId,
           pushToTalk: c.turnMode === 'pushToTalk',
           promptOverride: this.personaPrompt,
+          connectionType: c.connection === 'auto' ? (this.wsFallback ? 'websocket' : 'webrtc') : c.connection,
+          log: (t) => this.log('info', t),
         });
         break;
       case 'echo':
@@ -140,9 +145,24 @@ export class SessionManager {
     this.stateCb(s);
     if (s === 'disconnected' && prev !== 'disconnected' && this.wantConnected && !this.connecting) {
       this.log('info', 'connection dropped, will retry');
+      this.considerTransportFallback();
       this.scheduleRetry();
     }
-    if (s !== 'disconnected' && s !== 'connecting') this.retryIndex = 0;
+    if (s !== 'disconnected' && s !== 'connecting') {
+      this.retryIndex = 0;
+      if (prev === 'connecting' || prev === 'disconnected') this.connectedAt = performance.now();
+    }
+  }
+
+  /** WebRTC that fails to connect, or drops within seconds of connecting, is usually a UDP-blocking network. */
+  private considerTransportFallback(): void {
+    const c = this.getConfig().agent;
+    if (c.provider !== 'elevenlabs' || c.connection !== 'auto' || this.wsFallback) return;
+    const quick = this.connectedAt < 0 || performance.now() - this.connectedAt < 5000;
+    if (!quick) return;
+    this.wsFallback = true;
+    this.agent = null; // next connect builds a WebSocket agent
+    this.log('info', 'WebRTC failed quickly; switching to WebSocket transport');
   }
 
   private requestConnect(): void {
@@ -156,6 +176,7 @@ export class SessionManager {
     if (this.agentState !== 'disconnected') return;
     if (!this.agent) this.agent = this.buildAgent();
     this.connecting = true;
+    this.connectedAt = -1;
     try {
       this.log('info', `connecting (${this.agent.name})`);
       await this.agent.connect();
@@ -165,7 +186,10 @@ export class SessionManager {
       if (this.talkHeld) this.agent.setMicEnabled(true);
     } catch (e) {
       this.connecting = false;
-      if (this.wantConnected) this.scheduleRetry();
+      if (this.wantConnected) {
+        this.considerTransportFallback();
+        this.scheduleRetry();
+      }
     }
   }
 

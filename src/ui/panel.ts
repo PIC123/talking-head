@@ -22,6 +22,8 @@ export function createPanel(store: ConfigStore, hooks: PanelHooks): Pane {
   agent.addBinding(c.agent, 'agentId').on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'turnMode', { options: { 'Push to talk': 'pushToTalk', 'Open mic': 'openMic' } })
     .on('change', () => { touch(); hooks.onAgentChanged(); });
+  agent.addBinding(c.agent, 'connection', { options: { 'Auto (WebRTC, then WebSocket)': 'auto', 'WebRTC': 'webrtc', 'WebSocket': 'websocket' } })
+    .on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'connectOnStart').on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'sessionIdleTimeoutSec', { min: 10, max: 300, step: 5 }).on('change', touch);
 

@@ -8,6 +8,8 @@ export interface ElevenLabsOptions {
   pushToTalk: boolean;
   /** Optional system prompt override; the agent must allow overrides in its Security settings. */
   promptOverride?: string;
+  connectionType: 'webrtc' | 'websocket';
+  log?: (text: string) => void;
 }
 
 /**
@@ -34,7 +36,9 @@ export class ElevenLabsAgent extends BaseAgent {
     try {
       const conv = await VoiceConversation.startSession({
         agentId: this.opts.agentId,
-        connectionType: 'webrtc',
+        connectionType: this.opts.connectionType,
+        onConnect: ({ conversationId }) =>
+          this.opts.log?.(`connected over ${this.opts.connectionType}, conversation ${conversationId}`),
         overrides: this.opts.promptOverride ? { agent: { prompt: { prompt: this.opts.promptOverride } } } : undefined,
         onStatusChange: ({ status }) => this.onStatus(status),
         onModeChange: ({ mode }) => this.onMode(mode),
@@ -42,7 +46,14 @@ export class ElevenLabsAgent extends BaseAgent {
         onDisconnect: (details) => {
           this.conv = null;
           if (details.reason !== 'user') {
-            this.emitError(new Error(`disconnected by ${details.reason}: ${'message' in details ? details.message : ''}`));
+            const bits = [
+              'message' in details ? details.message : '',
+              details.context?.reason ? `reason: ${details.context.reason}` : '',
+              details.context?.type ? `type: ${details.context.type}` : '',
+              details.closeCode !== undefined ? `code ${details.closeCode}` : '',
+              details.closeReason ? details.closeReason : '',
+            ].filter(Boolean);
+            this.emitError(new Error(`disconnected by ${details.reason} (${bits.join(', ') || 'no detail given'})`));
           }
           this.setState('disconnected');
         },

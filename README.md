@@ -28,6 +28,8 @@ URL parameters: `?windowed` skips auto-fullscreen, `?edit` starts in edit mode, 
 3. Put the agent ID in the edit panel (it is saved to localStorage) or export/import a config JSON.
 4. Optional: to push `config/persona.md` from the app instead of the dashboard, enable **prompt overrides** in the agent's Security tab and run with `VITE_PROMPT_OVERRIDE=1 npm run dev`.
 
+**Transport.** The SDK connects over WebRTC by default, which needs UDP; some venue and corporate wifi blocks it, and the symptom is a session that connects and is "disconnected by agent" within seconds. In `Auto` mode the app notices and switches to the WebSocket transport, which works over plain HTTPS. You can force either in the Agent folder. The log shows the conversation ID of every session so you can find it in the agent's Call history on ElevenLabs.
+
 Turn-taking is push-to-talk by default: the SDK's mic stays muted except while Space is held, so a loud room never triggers the agent. Pressing talk while the head is speaking interrupts it. **Open mic** mode (provider VAD) is in the panel if the room is quiet.
 
 ## Deploying
