@@ -67,7 +67,8 @@ function setEditMode(on: boolean): void {
   document.body.classList.toggle('show', !on && !isControl);
   if (on && !panel) {
     panel = createPanel(store, {
-      onAgentChanged: () => void session.rebuild(),
+      // The control tab never runs a session; the face rebuilds its own when the synced config changes.
+      onAgentChanged: () => !isControl && session.rebuild(),
       onFullscreen: () => void requestFullscreen(),
       onPickUnderlay: () => void underlay.pick().then(() => sync.send({ type: 'underlay' })),
       onClearUnderlay: () => {
@@ -99,7 +100,7 @@ sync.on((m) => {
     case 'config': {
       const agentBefore = JSON.stringify(store.cfg.agent);
       store.applyRemote(m.cfg);
-      if (!isControl && JSON.stringify(store.cfg.agent) !== agentBefore) void session.rebuild();
+      if (!isControl && JSON.stringify(store.cfg.agent) !== agentBefore) session.rebuild();
       break;
     }
     case 'ui':
@@ -352,7 +353,15 @@ if (isControl) {
   document.body.classList.add('control');
   setEditMode(true);
   if (!sync.available) log('err', 'BroadcastChannel unavailable; open the control tab in the same browser as the face');
-  else log('info', 'control tab ready; open the face window in another tab of this browser');
+  else {
+    log('info', 'control tab ready; open the face window in another window of this browser');
+    window.setTimeout(() => {
+      if (!sync.peerSeen) {
+        log('err', 'no face window found. Open the plain URL (no ?control) in another window of this browser, click Start there, then use this tab.');
+        editor.updateHud('NO FACE WINDOW DETECTED');
+      }
+    }, 2500);
+  }
   requestAnimationFrame(frame);
 } else {
   setEditMode(false);

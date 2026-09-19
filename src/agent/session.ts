@@ -80,9 +80,20 @@ export class SessionManager {
   }
 
   /** Provider or agent settings changed: drop the current session; the next talk press rebuilds it. */
-  async rebuild(): Promise<void> {
-    await this.endSession('config changed');
+  rebuild(): void {
+    const old = this.agent;
+    this.wantConnected = false;
+    window.clearTimeout(this.retryTimer);
+    this.retryIndex = 0;
+    // Detach first so a talk press during the async disconnect builds a fresh agent instead of
+    // reviving the old one; stale callbacks from `old` are ignored (see buildAgent).
     this.agent = null;
+    if (old && this.agentState !== 'disconnected') {
+      this.log('info', 'ending session: config changed');
+      void old.disconnect().catch((e) => this.log('err', `disconnect failed: ${String(e)}`));
+    }
+    this.agentState = 'disconnected';
+    this.stateCb('disconnected');
     this.start();
   }
 
@@ -115,7 +126,9 @@ export class SessionManager {
       default:
         agent = new MicLoopAgent();
     }
-    agent.onState((s) => this.handleState(s));
+    agent.onState((s) => {
+      if (this.agent === agent) this.handleState(s);
+    });
     agent.onError((e) => this.log('err', e.message));
     agent.onTranscript((l: TranscriptLine) => this.log(l.role, l.text));
     return agent;
