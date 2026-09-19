@@ -10,11 +10,14 @@ import { createPanel } from './ui/panel';
 import { keepAwake, requestFullscreen, showStartOverlay } from './ui/start';
 import { Underlay } from './ui/underlay';
 import { Sync } from './sync';
+import { copyLog, runDiagnostics } from './ui/diagnostics';
 import personaMd from '../config/persona.md?raw';
 
 const params = new URLSearchParams(location.search);
 /** ?control turns this tab into a remote for the face window open in the same browser. */
 const isControl = params.has('control');
+/** ?debug: face plus a phone-readable log, self-test and copy button. No panel. */
+const isDebug = params.has('debug') && !isControl;
 
 const store = new ConfigStore();
 
@@ -288,7 +291,10 @@ window.addEventListener('blur', () => talkRelease());
 // Pointer-based talk: hold the right mouse button (presenter clicker), or on a touch screen
 // hold a finger anywhere in show mode. Edit mode keeps touch free for the panel and handles.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
-const isTouchTalk = (e: PointerEvent) => e.pointerType === 'touch' && !editMode;
+const isTouchTalk = (e: PointerEvent) =>
+  e.pointerType === 'touch' &&
+  !editMode &&
+  !(e.target as HTMLElement | null)?.closest('button, #start, #debugbar, #panel, #log, .handle');
 window.addEventListener('pointerdown', (e) => {
   if (e.button === 2 || isTouchTalk(e)) {
     if (isTouchTalk(e)) e.preventDefault();
@@ -319,7 +325,7 @@ function frame(now: number): void {
   else face.draw(params, store.cfg.face, dt);
   out.draw(face.canvas, store.cfg.mapping);
 
-  if (!isControl && (editMode || sync.peerSeen)) {
+  if (!isControl && (editMode || isDebug || sync.peerSeen)) {
     fpsAcc += dt;
     fpsN++;
     if (fpsAcc >= 500) {
@@ -330,7 +336,7 @@ function frame(now: number): void {
     const l = session.getLevel();
     let status = `${fps} fps  state=${session.getAgentState()}  talk=${session.isTalkHeld() ? 'HELD' : '-'}  level=${l.level.toFixed(2)} mouth=${params.mouthOpen.toFixed(2)}  idle=${Math.round(session.msSinceActivity() / 1000)}s`;
     if (!started) status += '\nFACE WINDOW NOT STARTED: click Start there first, or its audio stays blocked';
-    if (editMode) editor.updateHud(status);
+    if (editMode || isDebug) editor.updateHud(status);
     statusAcc += dt;
     if (statusAcc >= 250 && sync.peerSeen) {
       statusAcc = 0;
@@ -346,6 +352,20 @@ function frame(now: number): void {
 // ---------------- Boot
 window.addEventListener('error', (e) => log('err', `uncaught: ${e.message}`));
 window.addEventListener('unhandledrejection', (e) => log('err', `unhandled: ${String(e.reason)}`));
+
+if (isDebug) {
+  document.body.classList.add('debug');
+  document.getElementById('dbg-run')!.addEventListener('click', () => void runDiagnostics(store.cfg, log));
+  document.getElementById('dbg-copy')!.addEventListener('click', async () => {
+    const ok = await copyLog(logEl);
+    log('info', ok ? 'log copied to clipboard' : 'copy failed; long-press the log to select it');
+  });
+  document.getElementById('dbg-reconnect')!.addEventListener('click', () => {
+    session.rebuild();
+    session.pressTalk();
+    window.setTimeout(() => session.releaseTalk(), 300);
+  });
+}
 
 if (isControl) {
   // Remote: no audio, no fullscreen, panel always on, preview of the face behind it.
@@ -371,6 +391,7 @@ if (isControl) {
     keepAwake();
     session.start();
     if (params.has('edit')) setEditMode(true);
-    if (!params.has('windowed')) void requestFullscreen();
+    if (isDebug) void runDiagnostics(store.cfg, log);
+    else if (!params.has('windowed')) void requestFullscreen();
   });
 }

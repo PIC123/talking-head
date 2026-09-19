@@ -19,7 +19,7 @@ npm run dev        # http://localhost:5173  (mic works on localhost without HTTP
 3. Switch provider to **Echo** to test the whole turn loop with no API: hold Space, talk, release, and the head "thinks" then plays your recording back through the mouth.
 4. Switch provider to **ElevenLabs**, paste your agent ID, press E to leave edit mode, hold Space and talk.
 
-URL parameters: `?windowed` skips auto-fullscreen, `?edit` starts in edit mode, `?agent=<id>` sets the ElevenLabs agent ID (handy for a kiosk launch command), `?control` opens the remote-control tab (see below).
+URL parameters: `?windowed` skips auto-fullscreen, `?edit` starts in edit mode, `?agent=<id>` sets the ElevenLabs agent ID (handy for a kiosk launch command), `?control` opens the remote-control tab, `?debug` the phone-friendly self-test view (see below).
 
 ## ElevenLabs setup
 
@@ -79,6 +79,10 @@ The same URL works on a phone or tablet: tap Start, then hold a finger anywhere 
 4. Stage 3: enable the ellipse mask and feather it to cut spill past the mask edge.
 5. Stage 4: enable hotspot compensation to dim the bright center of a rear projection.
 6. Press T, then tune the face **Layout** (eye spacing, eye Y, mouth Y, mouth width) until the features land on the mask's features. Press E. Ctrl+S to back up the config.
+
+## Troubleshooting on a phone
+
+Open the URL with `?debug` (plus `&agent=<id>` if needed). Tap Start and it runs a self-test into a big readable log: secure context, mic permission (with the fix for the platform if blocked), and a request to ElevenLabs for a session token using the same call the SDK makes. A non-200 status is explained in place: 401 means authentication is on, 403 an allowlist mismatch, 402/429 quota. **Copy log** puts the whole log on the clipboard to paste into a chat; **Reconnect** forces a fresh session; the HOLD TO TALK button is there too.
 
 ## Remote control tab
 

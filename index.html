@@ -40,6 +40,20 @@
         border-radius: 4px; display: none; white-space: pre-wrap;
       }
       body.edit #log { display: block; }
+      body.debug #log {
+        display: block; left: 8px; right: 8px; bottom: 76px; width: auto; max-height: 55vh; font-size: 13px; line-height: 1.4;
+        -webkit-user-select: text; user-select: text;
+      }
+      body.debug #hud { display: block; left: 8px; right: 8px; top: 8px; bottom: auto; font-size: 12px; white-space: pre-wrap; }
+      body.debug #talk { display: block; }
+      body.debug #stage { cursor: auto; }
+      #debugbar { position: absolute; left: 8px; right: 8px; bottom: 8px; display: none; gap: 8px; z-index: 6; }
+      body.debug #debugbar { display: flex; }
+      #debugbar button {
+        flex: 1; padding: 12px 8px; border-radius: 8px; border: 1px solid #888; background: #111; color: #eee;
+        font: 14px system-ui, sans-serif; cursor: pointer;
+      }
+      body.debug #talk { bottom: 60px; }
       #log .err { color: #ff6b6b; }
       #log .agent { color: #8fe3ff; }
       #log .user { color: #c8ffb0; }
@@ -79,6 +93,11 @@
       <div id="panel"></div>
       <div id="banner">REMOTE CONTROL — this is a preview; changes apply to the face window. Space = talk there, E = overlay there, T = test pattern.</div>
       <button id="talk" type="button">HOLD TO TALK</button>
+      <div id="debugbar">
+        <button id="dbg-run" type="button">Run checks</button>
+        <button id="dbg-copy" type="button">Copy log</button>
+        <button id="dbg-reconnect" type="button">Reconnect</button>
+      </div>
       <div id="hud"></div>
       <div id="log"></div>
     </div>
