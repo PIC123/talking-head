@@ -48,7 +48,7 @@ The mic needs a secure context, which both `localhost` and Vercel's HTTPS satisf
 
 | Key | Action |
 | --- | --- |
-| Space (hold), right mouse button (hold), or finger on screen (hold, show mode) | Push to talk |
+| Space (hold), right mouse button (hold), finger on screen (hold, show mode), or the HOLD TO TALK button (edit mode / control tab) | Push to talk |
 | E | Toggle edit mode (panel, HUD, log, cursor) |
 | T | Toggle test pattern (grid, crosshair, circle, orientation marks) |
 | F | Toggle fullscreen |
@@ -83,6 +83,7 @@ The same URL works on a phone or tablet: tap Start, then hold a finger anywhere 
 While mapping, the projector is the only screen showing the face, so open the controls somewhere else: in the same browser, open the URL with `?control` added in a second tab or window and put it on the laptop screen. Keep the face window fullscreen on the projector.
 
 - Every slider, key and corner drag in the control tab applies to the face window instantly, and vice versa. The control tab shows a live preview, the face window's HUD (fps, state, level) and its log with the transcript.
+- The face window must have had its **Start** click, or the browser keeps its audio blocked; the control tab's HUD says so in that case. Keep the face in its own window, not a background tab, or the browser pauses its rendering.
 - **E** in the control tab toggles the overlay (corner handles, HUD) on the face window without putting the panel on the projection. **T** toggles the test pattern on both. **Space** talks through the face window's mic.
 - The two tabs talk over the browser's BroadcastChannel, so they must be in the same browser profile on the same machine. A phone as a remote would need a relay server and is not supported.
 

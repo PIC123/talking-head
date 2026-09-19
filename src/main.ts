@@ -124,14 +124,50 @@ sync.on((m) => {
 });
 
 /** In the control tab, talk and overlay keys act on the face window instead of here. */
-const talkPress = () => (isControl ? sync.send({ type: 'talk', on: true }) : session.pressTalk());
-const talkRelease = () => (isControl ? sync.send({ type: 'talk', on: false }) : session.releaseTalk());
+const talkBtn = document.getElementById('talk') as HTMLButtonElement;
+const talkPress = () => {
+  talkBtn.classList.add('held');
+  isControl ? sync.send({ type: 'talk', on: true }) : session.pressTalk();
+};
+const talkRelease = () => {
+  talkBtn.classList.remove('held');
+  isControl ? sync.send({ type: 'talk', on: false }) : session.releaseTalk();
+};
 let remoteEdit = false;
 
+// A visible hold-to-talk button (edit mode and control tab) for mouse, touch and anyone who
+// has not read the placard.
+talkBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  talkBtn.setPointerCapture(e.pointerId);
+  talkPress();
+});
+for (const ev of ['pointerup', 'pointercancel'] as const) {
+  talkBtn.addEventListener(ev, (e) => {
+    e.stopPropagation();
+    talkRelease();
+  });
+}
+talkBtn.addEventListener('keydown', (e) => e.preventDefault()); // Space/Enter must not "click" it
+talkBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Keep the keyboard on the stage: after any click that is not into a text field, drop focus so
+// Space reaches the talk handler instead of a panel button or slider.
+window.addEventListener('pointerup', () => {
+  const a = document.activeElement as HTMLElement | null;
+  if (a && a !== document.body && !isTextField(a)) a.blur();
+});
+
 // ---------------- Keyboard map
+const isTextField = (t: HTMLElement) =>
+  (t.tagName === 'INPUT' && !['button', 'checkbox', 'range', 'color', 'submit'].includes((t as HTMLInputElement).type)) ||
+  t.tagName === 'TEXTAREA' ||
+  t.tagName === 'SELECT' ||
+  t.isContentEditable;
 const isTyping = (e: KeyboardEvent) => {
   const t = e.target as HTMLElement | null;
-  return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  return !!t && isTextField(t);
 };
 
 window.addEventListener('keydown', (e) => {
@@ -267,6 +303,7 @@ window.addEventListener('pointercancel', releaseIfTalk);
 // ---------------- Render loop
 let last = performance.now();
 let statusAcc = 0;
+let started = false;
 function frame(now: number): void {
   const dt = Math.min(100, now - last);
   last = now;
@@ -281,7 +318,7 @@ function frame(now: number): void {
   else face.draw(params, store.cfg.face, dt);
   out.draw(face.canvas, store.cfg.mapping);
 
-  if (editMode && !isControl) {
+  if (!isControl && (editMode || sync.peerSeen)) {
     fpsAcc += dt;
     fpsN++;
     if (fpsAcc >= 500) {
@@ -290,10 +327,11 @@ function frame(now: number): void {
       fpsN = 0;
     }
     const l = session.getLevel();
-    const status = `${fps} fps  state=${session.getAgentState()}  talk=${session.isTalkHeld() ? 'HELD' : '-'}  level=${l.level.toFixed(2)} mouth=${params.mouthOpen.toFixed(2)}  idle=${Math.round(session.msSinceActivity() / 1000)}s`;
-    editor.updateHud(status);
+    let status = `${fps} fps  state=${session.getAgentState()}  talk=${session.isTalkHeld() ? 'HELD' : '-'}  level=${l.level.toFixed(2)} mouth=${params.mouthOpen.toFixed(2)}  idle=${Math.round(session.msSinceActivity() / 1000)}s`;
+    if (!started) status += '\nFACE WINDOW NOT STARTED: click Start there first, or its audio stays blocked';
+    if (editMode) editor.updateHud(status);
     statusAcc += dt;
-    if (statusAcc >= 250) {
+    if (statusAcc >= 250 && sync.peerSeen) {
       statusAcc = 0;
       sync.send({ type: 'status', hud: status });
     }
@@ -320,6 +358,7 @@ if (isControl) {
   setEditMode(false);
   requestAnimationFrame(frame); // idle face runs behind the Start overlay too.
   showStartOverlay(() => {
+    started = true;
     keepAwake();
     session.start();
     if (params.has('edit')) setEditMode(true);

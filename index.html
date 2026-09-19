@@ -43,6 +43,13 @@
       #log .err { color: #ff6b6b; }
       #log .agent { color: #8fe3ff; }
       #log .user { color: #c8ffb0; }
+      #talk {
+        position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 6;
+        padding: 14px 36px; border-radius: 999px; border: 2px solid #ffb400; color: #ffb400; background: rgba(0,0,0,0.7);
+        font: bold 15px system-ui, sans-serif; letter-spacing: 0.05em; cursor: pointer; display: none; user-select: none; touch-action: none;
+      }
+      #talk.held { background: #ffb400; color: #000; }
+      body.edit #talk { display: block; }
       #start {
         position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
         background: #000; z-index: 10; cursor: pointer;
@@ -71,6 +78,7 @@
       <div id="overlay"></div>
       <div id="panel"></div>
       <div id="banner">REMOTE CONTROL — this is a preview; changes apply to the face window. Space = talk there, E = overlay there, T = test pattern.</div>
+      <button id="talk" type="button">HOLD TO TALK</button>
       <div id="hud"></div>
       <div id="log"></div>
     </div>
