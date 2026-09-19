@@ -19,7 +19,7 @@ npm run dev        # http://localhost:5173  (mic works on localhost without HTTP
 3. Switch provider to **Echo** to test the whole turn loop with no API: hold Space, talk, release, and the head "thinks" then plays your recording back through the mouth.
 4. Switch provider to **ElevenLabs**, paste your agent ID, press E to leave edit mode, hold Space and talk.
 
-Add `?windowed` to the URL to skip auto-fullscreen and `?edit` to start in edit mode.
+URL parameters: `?windowed` skips auto-fullscreen, `?edit` starts in edit mode, `?agent=<id>` sets the ElevenLabs agent ID (handy for a kiosk launch command).
 
 ## ElevenLabs setup
 
@@ -29,6 +29,20 @@ Add `?windowed` to the URL to skip auto-fullscreen and `?edit` to start in edit 
 4. Optional: to push `config/persona.md` from the app instead of the dashboard, enable **prompt overrides** in the agent's Security tab and run with `VITE_PROMPT_OVERRIDE=1 npm run dev`.
 
 Turn-taking is push-to-talk by default: the SDK's mic stays muted except while Space is held, so a loud room never triggers the agent. Pressing talk while the head is speaking interrupts it. **Open mic** mode (provider VAD) is in the panel if the room is quiet.
+
+## Deploying
+
+The app is static, so hosting only decides where Chrome loads the files from; the laptop on the projector does all the work.
+
+**Vercel (recommended).** Import the repo; Vercel detects Vite and serves `dist/`. Optionally set the env var `VITE_ELEVENLABS_AGENT_ID` in the project settings so the agent is preset (the ID is then in the public bundle, so only do this if you are fine with anyone who finds the URL talking to your agent). Otherwise leave it out and set the ID once in the edit panel on the laptop, where it stays in localStorage.
+
+**Local fallback.** Venue wifi can fail at the worst moment, so also keep a build on the laptop:
+
+```bash
+npm run build && npm run preview   # http://localhost:4173
+```
+
+The mic needs a secure context, which both `localhost` and Vercel's HTTPS satisfy. A LAN IP over plain HTTP will not get mic access.
 
 ## Keyboard map
 

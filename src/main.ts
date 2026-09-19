@@ -11,6 +11,23 @@ import { keepAwake, requestFullscreen, showStartOverlay } from './ui/start';
 import personaMd from '../config/persona.md?raw';
 
 const store = new ConfigStore();
+
+// Agent ID can come from the URL (?agent=...) for kiosk launches, or from a build-time env
+// (VITE_ELEVENLABS_AGENT_ID) as a default. localStorage still wins once set in the panel.
+{
+  const q = new URLSearchParams(location.search);
+  const fromUrl = q.get('agent');
+  const fromEnv = import.meta.env.VITE_ELEVENLABS_AGENT_ID as string | undefined;
+  if (fromUrl) {
+    store.cfg.agent.agentId = fromUrl;
+    store.cfg.agent.provider = 'elevenlabs';
+    store.touch();
+  } else if (fromEnv && !store.cfg.agent.agentId) {
+    store.cfg.agent.agentId = fromEnv;
+    store.cfg.agent.provider = 'elevenlabs';
+    store.touch();
+  }
+}
 const log = createLog(document.getElementById('log')!);
 const session = new SessionManager(() => store.cfg, log);
 // The persona lives in config/persona.md. Sent as a prompt override only if the ElevenLabs
