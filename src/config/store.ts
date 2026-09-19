@@ -4,12 +4,16 @@ const KEY = 'talking-head:config';
 const PRESET_KEY = (slot: number) => `talking-head:preset:${slot}`;
 
 type Listener = (cfg: Config) => void;
+type Broadcaster = (cfg: Config) => void;
 
 /** Single source of truth for all tunables. Autosaves to localStorage 500 ms after any change. */
 export class ConfigStore {
   cfg: Config;
   private listeners = new Set<Listener>();
   private saveTimer: number | undefined;
+  private broadcaster: Broadcaster | null = null;
+  private applyingRemote = false;
+  private broadcastQueued = false;
 
   constructor() {
     this.cfg = this.loadFromStorage() ?? defaultConfig();
@@ -35,6 +39,30 @@ export class ConfigStore {
     for (const l of this.listeners) l(this.cfg);
     window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => this.save(), 500);
+    if (this.broadcaster && !this.applyingRemote && !this.broadcastQueued) {
+      // Coalesce a drag's many touches into one message per frame.
+      this.broadcastQueued = true;
+      requestAnimationFrame(() => {
+        this.broadcastQueued = false;
+        this.broadcaster?.(this.cfg);
+      });
+    }
+  }
+
+  /** Mirror every change to another tab. */
+  setBroadcaster(b: Broadcaster | null): void {
+    this.broadcaster = b;
+  }
+
+  /** Apply a config received from another tab without echoing it back. */
+  applyRemote(next: Config): void {
+    this.applyingRemote = true;
+    try {
+      assignDeep(this.cfg, migrate(next));
+      this.touch();
+    } finally {
+      this.applyingRemote = false;
+    }
   }
 
   /** Replace all values but keep object identity, so panel bindings stay live. */

@@ -19,7 +19,7 @@ npm run dev        # http://localhost:5173  (mic works on localhost without HTTP
 3. Switch provider to **Echo** to test the whole turn loop with no API: hold Space, talk, release, and the head "thinks" then plays your recording back through the mouth.
 4. Switch provider to **ElevenLabs**, paste your agent ID, press E to leave edit mode, hold Space and talk.
 
-URL parameters: `?windowed` skips auto-fullscreen, `?edit` starts in edit mode, `?agent=<id>` sets the ElevenLabs agent ID (handy for a kiosk launch command).
+URL parameters: `?windowed` skips auto-fullscreen, `?edit` starts in edit mode, `?agent=<id>` sets the ElevenLabs agent ID (handy for a kiosk launch command), `?control` opens the remote-control tab (see below).
 
 ## ElevenLabs setup
 
@@ -77,6 +77,16 @@ The same URL works on a phone or tablet: tap Start, then hold a finger anywhere 
 4. Stage 3: enable the ellipse mask and feather it to cut spill past the mask edge.
 5. Stage 4: enable hotspot compensation to dim the bright center of a rear projection.
 6. Press T, then tune the face **Layout** (eye spacing, eye Y, mouth Y, mouth width) until the features land on the mask's features. Press E. Ctrl+S to back up the config.
+
+## Remote control tab
+
+While mapping, the projector is the only screen showing the face, so open the controls somewhere else: in the same browser, open the URL with `?control` added in a second tab or window and put it on the laptop screen. Keep the face window fullscreen on the projector.
+
+- Every slider, key and corner drag in the control tab applies to the face window instantly, and vice versa. The control tab shows a live preview, the face window's HUD (fps, state, level) and its log with the transcript.
+- **E** in the control tab toggles the overlay (corner handles, HUD) on the face window without putting the panel on the projection. **T** toggles the test pattern on both. **Space** talks through the face window's mic.
+- The two tabs talk over the browser's BroadcastChannel, so they must be in the same browser profile on the same machine. A phone as a remote would need a relay server and is not supported.
+
+Kiosk tip: launch the face window with `--kiosk` on the projector display, then open `?control` in a normal window on the laptop display.
 
 ## Painting mode
 

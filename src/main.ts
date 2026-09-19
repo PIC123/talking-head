@@ -9,15 +9,19 @@ import { createLog } from './ui/log';
 import { createPanel } from './ui/panel';
 import { keepAwake, requestFullscreen, showStartOverlay } from './ui/start';
 import { Underlay } from './ui/underlay';
+import { Sync } from './sync';
 import personaMd from '../config/persona.md?raw';
+
+const params = new URLSearchParams(location.search);
+/** ?control turns this tab into a remote for the face window open in the same browser. */
+const isControl = params.has('control');
 
 const store = new ConfigStore();
 
 // Agent ID can come from the URL (?agent=...) for kiosk launches, or from a build-time env
 // (VITE_ELEVENLABS_AGENT_ID) as a default. localStorage still wins once set in the panel.
 {
-  const q = new URLSearchParams(location.search);
-  const fromUrl = q.get('agent');
+  const fromUrl = params.get('agent');
   const fromEnv = import.meta.env.VITE_ELEVENLABS_AGENT_ID as string | undefined;
   if (fromUrl) {
     store.cfg.agent.agentId = fromUrl;
@@ -29,7 +33,16 @@ const store = new ConfigStore();
     store.touch();
   }
 }
-const log = createLog(document.getElementById('log')!);
+
+const logEl = document.getElementById('log')!;
+const localLog = createLog(logEl);
+const sync = new Sync(isControl ? 'control' : 'face');
+// The face window forwards its log to the control tab so errors and transcripts are readable there.
+const log: typeof localLog = (kind, text) => {
+  localLog(kind, text);
+  if (!isControl) sync.send({ type: 'log', kind, text });
+};
+
 const session = new SessionManager(() => store.cfg, log);
 // The persona lives in config/persona.md. Sent as a prompt override only if the ElevenLabs
 // agent allows overrides; otherwise paste it into the dashboard (see README).
@@ -51,17 +64,69 @@ let fpsN = 0;
 function setEditMode(on: boolean): void {
   editMode = on;
   document.body.classList.toggle('edit', on);
-  document.body.classList.toggle('show', !on);
+  document.body.classList.toggle('show', !on && !isControl);
   if (on && !panel) {
     panel = createPanel(store, {
       onAgentChanged: () => void session.rebuild(),
       onFullscreen: () => void requestFullscreen(),
-      onPickUnderlay: () => void underlay.pick(),
-      onClearUnderlay: () => underlay.clear(),
+      onPickUnderlay: () => void underlay.pick().then(() => sync.send({ type: 'underlay' })),
+      onClearUnderlay: () => {
+        underlay.clear();
+        sync.send({ type: 'underlay' });
+      },
     });
   }
-  if (panel) panel.hidden = !on;
+  showPanel(on);
 }
+
+/** Once a control tab is driving, keep the panel off the projection; handles and HUD still show. */
+function showPanel(on: boolean): void {
+  const visible = on && !(!isControl && sync.peerSeen);
+  document.getElementById('panel')!.classList.toggle('on', visible);
+}
+
+// ---------------- Cross-tab sync
+store.setBroadcaster((cfg) => sync.send({ type: 'config', cfg }));
+sync.on((m) => {
+  switch (m.type) {
+    case 'hello':
+      if (!isControl && m.role === 'control') {
+        showPanel(editMode);
+        sync.send({ type: 'config', cfg: store.cfg });
+        sync.send({ type: 'ui', editMode, testPattern, stage: editor.stage, selected: editor.selected });
+      }
+      break;
+    case 'config': {
+      const agentBefore = JSON.stringify(store.cfg.agent);
+      store.applyRemote(m.cfg);
+      if (!isControl && JSON.stringify(store.cfg.agent) !== agentBefore) void session.rebuild();
+      break;
+    }
+    case 'ui':
+      if (m.editMode !== undefined) setEditMode(isControl ? true : m.editMode);
+      if (m.testPattern !== undefined) testPattern = m.testPattern;
+      if (m.stage !== undefined) editor.setStage(m.stage as Stage);
+      if (m.selected !== undefined) editor.selectCorner(m.selected);
+      break;
+    case 'talk':
+      if (!isControl) m.on ? session.pressTalk() : session.releaseTalk();
+      break;
+    case 'underlay':
+      underlay.reload();
+      break;
+    case 'status':
+      if (isControl) editor.updateHud(m.hud);
+      break;
+    case 'log':
+      if (isControl) localLog(m.kind, m.text);
+      break;
+  }
+});
+
+/** In the control tab, talk and overlay keys act on the face window instead of here. */
+const talkPress = () => (isControl ? sync.send({ type: 'talk', on: true }) : session.pressTalk());
+const talkRelease = () => (isControl ? sync.send({ type: 'talk', on: false }) : session.releaseTalk());
+let remoteEdit = false;
 
 // ---------------- Keyboard map
 const isTyping = (e: KeyboardEvent) => {
@@ -73,7 +138,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') {
     if (isTyping(e)) return;
     e.preventDefault();
-    if (!e.repeat) session.pressTalk();
+    if (!e.repeat) talkPress();
     return;
   }
   if (isTyping(e)) return;
@@ -82,10 +147,14 @@ window.addEventListener('keydown', (e) => {
   const m = store.cfg.mapping;
   switch (e.code) {
     case 'KeyE':
-      setEditMode(!editMode);
+      if (isControl) {
+        remoteEdit = !remoteEdit;
+        sync.send({ type: 'ui', editMode: remoteEdit });
+      } else setEditMode(!editMode);
       break;
     case 'KeyT':
       testPattern = !testPattern;
+      sync.send({ type: 'ui', testPattern });
       break;
     case 'KeyF':
       void requestFullscreen();
@@ -129,6 +198,7 @@ window.addEventListener('keydown', (e) => {
       if (editMode && editor.stage === 2) {
         e.preventDefault();
         editor.selectCorner(editor.selected + (e.shiftKey ? -1 : 1));
+        sync.send({ type: 'ui', selected: editor.selected });
       }
       break;
     case 'ArrowLeft':
@@ -166,6 +236,7 @@ window.addEventListener('keydown', (e) => {
         if (n <= 3) log('info', store.loadPreset(n) ? `loaded preset ${n}` : `preset ${n} is empty`);
       } else if (editMode) {
         editor.setStage(n as Stage);
+        sync.send({ type: 'ui', stage: n });
       }
       break;
     }
@@ -173,10 +244,10 @@ window.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('keyup', (e) => {
-  if (e.code === 'Space') session.releaseTalk();
+  if (e.code === 'Space') talkRelease();
 });
 // Never leave the mic open if the key-up is lost (window blur, fullscreen change).
-window.addEventListener('blur', () => session.releaseTalk());
+window.addEventListener('blur', () => talkRelease());
 // Pointer-based talk: hold the right mouse button (presenter clicker), or on a touch screen
 // hold a finger anywhere in show mode. Edit mode keeps touch free for the panel and handles.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -184,17 +255,18 @@ const isTouchTalk = (e: PointerEvent) => e.pointerType === 'touch' && !editMode;
 window.addEventListener('pointerdown', (e) => {
   if (e.button === 2 || isTouchTalk(e)) {
     if (isTouchTalk(e)) e.preventDefault();
-    session.pressTalk();
+    talkPress();
   }
 });
 const releaseIfTalk = (e: PointerEvent) => {
-  if (e.button === 2 || e.pointerType === 'touch') session.releaseTalk();
+  if (e.button === 2 || e.pointerType === 'touch') talkRelease();
 };
 window.addEventListener('pointerup', releaseIfTalk);
 window.addEventListener('pointercancel', releaseIfTalk);
 
 // ---------------- Render loop
 let last = performance.now();
+let statusAcc = 0;
 function frame(now: number): void {
   const dt = Math.min(100, now - last);
   last = now;
@@ -209,7 +281,7 @@ function frame(now: number): void {
   else face.draw(params, store.cfg.face, dt);
   out.draw(face.canvas, store.cfg.mapping);
 
-  if (editMode) {
+  if (editMode && !isControl) {
     fpsAcc += dt;
     fpsN++;
     if (fpsAcc >= 500) {
@@ -218,22 +290,39 @@ function frame(now: number): void {
       fpsN = 0;
     }
     const l = session.getLevel();
-    editor.updateHud(
-      `${fps} fps  state=${session.getAgentState()}  talk=${session.isTalkHeld() ? 'HELD' : '-'}  level=${l.level.toFixed(2)} mouth=${params.mouthOpen.toFixed(2)}  idle=${Math.round(session.msSinceActivity() / 1000)}s`,
-    );
+    const status = `${fps} fps  state=${session.getAgentState()}  talk=${session.isTalkHeld() ? 'HELD' : '-'}  level=${l.level.toFixed(2)} mouth=${params.mouthOpen.toFixed(2)}  idle=${Math.round(session.msSinceActivity() / 1000)}s`;
+    editor.updateHud(status);
+    statusAcc += dt;
+    if (statusAcc >= 250) {
+      statusAcc = 0;
+      sync.send({ type: 'status', hud: status });
+    }
   }
   requestAnimationFrame(frame);
 }
+
+// Handy in the console and for tests: th.store.cfg, th.editor.
+(window as unknown as { th: unknown }).th = { store, editor, session, sync };
 
 // ---------------- Boot
 window.addEventListener('error', (e) => log('err', `uncaught: ${e.message}`));
 window.addEventListener('unhandledrejection', (e) => log('err', `unhandled: ${String(e.reason)}`));
 
-setEditMode(false);
-requestAnimationFrame(frame); // idle face runs behind the Start overlay too.
-showStartOverlay(() => {
-  keepAwake();
-  session.start();
-  if (new URLSearchParams(location.search).has('edit')) setEditMode(true);
-  if (!new URLSearchParams(location.search).has('windowed')) void requestFullscreen();
-});
+if (isControl) {
+  // Remote: no audio, no fullscreen, panel always on, preview of the face behind it.
+  document.getElementById('start')?.remove();
+  document.body.classList.add('control');
+  setEditMode(true);
+  if (!sync.available) log('err', 'BroadcastChannel unavailable; open the control tab in the same browser as the face');
+  else log('info', 'control tab ready; open the face window in another tab of this browser');
+  requestAnimationFrame(frame);
+} else {
+  setEditMode(false);
+  requestAnimationFrame(frame); // idle face runs behind the Start overlay too.
+  showStartOverlay(() => {
+    keepAwake();
+    session.start();
+    if (params.has('edit')) setEditMode(true);
+    if (!params.has('windowed')) void requestFullscreen();
+  });
+}

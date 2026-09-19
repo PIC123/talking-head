@@ -12,13 +12,19 @@ export class Underlay {
 
   constructor(private store: ConfigStore) {
     this.img = document.getElementById('underlay') as HTMLImageElement;
+    this.reload();
+    store.onChange(() => this.apply());
+  }
+
+  /** Re-read the stored photo (another tab may have changed it). */
+  reload(): void {
     try {
       const data = localStorage.getItem(KEY);
       if (data) this.img.src = data;
+      else this.img.removeAttribute('src');
     } catch (e) {
       console.warn('underlay load failed', e);
     }
-    store.onChange(() => this.apply());
     this.apply();
   }
 

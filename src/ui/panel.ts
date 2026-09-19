@@ -11,7 +11,8 @@ export interface PanelHooks {
 
 /** tweakpane panel with every tunable. Shown in edit mode only. */
 export function createPanel(store: ConfigStore, hooks: PanelHooks): Pane {
-  const pane = new Pane({ title: 'Talking Head', expanded: true });
+  const container = document.getElementById('panel')!;
+  const pane = new Pane({ title: 'Talking Head', expanded: true, container });
   const c = store.cfg;
   const touch = () => store.touch();
 

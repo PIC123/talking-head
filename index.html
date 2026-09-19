@@ -53,7 +53,15 @@
       }
       #start button:hover { background: rgba(191, 246, 255, 0.1); }
       #start p { position: absolute; bottom: 24px; color: #666; font-size: 13px; }
-      .tp-dfwv { z-index: 20; }
+      #panel { position: absolute; top: 8px; right: 8px; width: 256px; z-index: 20; display: none; max-height: calc(100vh - 16px); overflow: auto; }
+      #panel.on { display: block; }
+      #banner {
+        position: absolute; left: 0; right: 0; top: 0; padding: 6px 12px; text-align: center;
+        font: 13px ui-monospace, monospace; color: #000; background: #ffb400; display: none; z-index: 5; pointer-events: none;
+      }
+      body.control #banner { display: block; }
+      body.control #hud { bottom: auto; top: 36px; }
+      body.control #log { bottom: auto; top: 36px; right: auto; left: 12px; max-height: 30vh; width: 340px; margin-top: 60px; }
     </style>
   </head>
   <body class="stage-1">
@@ -61,6 +69,8 @@
       <img id="underlay" alt="" />
       <canvas id="out"></canvas>
       <div id="overlay"></div>
+      <div id="panel"></div>
+      <div id="banner">REMOTE CONTROL — this is a preview; changes apply to the face window. Space = talk there, E = overlay there, T = test pattern.</div>
       <div id="hud"></div>
       <div id="log"></div>
     </div>
