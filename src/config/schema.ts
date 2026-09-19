@@ -27,6 +27,21 @@ export interface Config {
     };
     showNose: boolean;
     showContour: boolean;
+    /** Per-feature visibility, for surfaces (a painting) that already carry some features. */
+    show: { eyeOutline: boolean; pupils: boolean; brows: boolean; mouth: boolean };
+    /** Soft light wash so the projector "lights" the surface; breathes and brightens on speech. */
+    wash: {
+      enabled: boolean;
+      color: string;
+      opacity: number;
+      cx: number;
+      cy: number;
+      rx: number;
+      ry: number;
+      softness: number;
+      breathe: number;
+      speechBoost: number;
+    };
   };
   mouth: {
     gate: number;
@@ -63,6 +78,8 @@ export interface Config {
     };
   };
   gaze: { enabled: boolean; invertX: boolean; gainX: number; gainY: number };
+  /** Edit-mode reference photo of the surface, drawn behind the face (image data is stored separately). */
+  underlay: { visible: boolean; opacity: number; scale: number; x: number; y: number };
 }
 
 export const CONFIG_VERSION = 1;
@@ -84,6 +101,8 @@ export const defaultConfig = (): Config => ({
     layout: { eyeSpacing: 220, eyeY: -80, eyeSize: 70, browOffset: 60, mouthY: 170, mouthWidth: 200 },
     showNose: false,
     showContour: false,
+    show: { eyeOutline: true, pupils: true, brows: true, mouth: true },
+    wash: { enabled: false, color: '#ffd9a8', opacity: 0.35, cx: 0, cy: 20, rx: 330, ry: 400, softness: 0.5, breathe: 0.15, speechBoost: 0.2 },
   },
   mouth: { gate: 0.05, attackMs: 40, releaseMs: 120, gamma: 0.7, gain: 2.5, jitter: 0.05 },
   behavior: { blinkMinSec: 2, blinkMaxSec: 6, doubleBlinkChance: 0.15, attractAfterSec: 60 },
@@ -99,6 +118,7 @@ export const defaultConfig = (): Config => ({
     output: { brightness: 1, hotspot: { enabled: false, cx: 0.5, cy: 0.5, radius: 0.4, strength: 0.3 } },
   },
   gaze: { enabled: false, invertX: true, gainX: 1, gainY: 0.6 },
+  underlay: { visible: true, opacity: 0.5, scale: 1, x: 0, y: 0 },
 });
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);

@@ -53,6 +53,7 @@ The mic needs a secure context, which both `localhost` and Vercel's HTTPS satisf
 | T | Toggle test pattern (grid, crosshair, circle, orientation marks) |
 | F | Toggle fullscreen |
 | H / V | Flip horizontal / vertical (flip H for rear projection) |
+| U | Toggle the reference photo (edit mode) |
 | 1–4 | Edit stage: transform / corner pin / ellipse mask / output |
 | Arrows (+Shift) | Nudge the active stage 1 / 10 px |
 | + / − (+Shift) | Scale (stage 1) |
@@ -72,6 +73,16 @@ Config autosaves to localStorage 500 ms after any change and restores on reload.
 4. Stage 3: enable the ellipse mask and feather it to cut spill past the mask edge.
 5. Stage 4: enable hotspot compensation to dim the bright center of a rear projection.
 6. Press T, then tune the face **Layout** (eye spacing, eye Y, mouth Y, mouth width) until the features land on the mask's features. Press E. Ctrl+S to back up the config.
+
+## Painting mode
+
+The same app maps onto a flat painting instead of a mask. Three things make that look intentional:
+
+- **Reference photo.** In the edit panel, *Reference photo → Load photo of surface*. Take the photo from roughly where the projector will sit. It shows behind the face in edit mode only (U toggles it), so you can align eye spacing, mouth Y and the corner pin at the desk. It is stored in the browser, not in the config export.
+- **Feature toggles.** *Face → Features* hides the eye outlines, pupils, brows or mouth individually, so the painting can supply what it already has and the projector adds only what moves. Paint the animated regions pale: projected light shows on light paint and dies on dark paint.
+- **Light wash.** *Face → Light wash* adds a soft colored ellipse under the features so the projector lights the painting from within. It breathes in idle, brightens on speech and dims when disconnected. Warm off-white at 0.3 to 0.5 opacity in a dim room is a good start.
+
+Save the painting and mask setups as presets (Ctrl+1 / Ctrl+2) and switch with Alt+1 / Alt+2.
 
 ## Show mode and robustness
 

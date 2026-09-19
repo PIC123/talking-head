@@ -5,6 +5,8 @@ import { downloadText, pickFile } from '../config/store';
 export interface PanelHooks {
   onAgentChanged: () => void;
   onFullscreen: () => void;
+  onPickUnderlay: () => void;
+  onClearUnderlay: () => void;
 }
 
 /** tweakpane panel with every tunable. Shown in edit mode only. */
@@ -29,6 +31,22 @@ export function createPanel(store: ConfigStore, hooks: PanelHooks): Pane {
   face.addBinding(c.face, 'brightness', { min: 0, max: 1, step: 0.01 }).on('change', touch);
   face.addBinding(c.face, 'showNose').on('change', touch);
   face.addBinding(c.face, 'showContour').on('change', touch);
+  const show = face.addFolder({ title: 'Features (hide what the surface already has)', expanded: false });
+  show.addBinding(c.face.show, 'eyeOutline').on('change', touch);
+  show.addBinding(c.face.show, 'pupils').on('change', touch);
+  show.addBinding(c.face.show, 'brows').on('change', touch);
+  show.addBinding(c.face.show, 'mouth').on('change', touch);
+  const wash = face.addFolder({ title: 'Light wash (for paintings)', expanded: false });
+  wash.addBinding(c.face.wash, 'enabled').on('change', touch);
+  wash.addBinding(c.face.wash, 'color').on('change', touch);
+  wash.addBinding(c.face.wash, 'opacity', { min: 0, max: 1, step: 0.01 }).on('change', touch);
+  wash.addBinding(c.face.wash, 'cx', { min: -512, max: 512, step: 1 }).on('change', touch);
+  wash.addBinding(c.face.wash, 'cy', { min: -512, max: 512, step: 1 }).on('change', touch);
+  wash.addBinding(c.face.wash, 'rx', { min: 20, max: 800, step: 1 }).on('change', touch);
+  wash.addBinding(c.face.wash, 'ry', { min: 20, max: 800, step: 1 }).on('change', touch);
+  wash.addBinding(c.face.wash, 'softness', { min: 0, max: 1, step: 0.01 }).on('change', touch);
+  wash.addBinding(c.face.wash, 'breathe', { min: 0, max: 1, step: 0.01 }).on('change', touch);
+  wash.addBinding(c.face.wash, 'speechBoost', { min: 0, max: 1, step: 0.01 }).on('change', touch);
   const layout = face.addFolder({ title: 'Layout', expanded: true });
   layout.addBinding(c.face.layout, 'eyeSpacing', { min: 80, max: 500, step: 1 }).on('change', touch);
   layout.addBinding(c.face.layout, 'eyeY', { min: -300, max: 200, step: 1 }).on('change', touch);
@@ -75,6 +93,15 @@ export function createPanel(store: ConfigStore, hooks: PanelHooks): Pane {
   out.addBinding(c.mapping.output.hotspot, 'cy', { min: 0, max: 1, step: 0.001 }).on('change', touch);
   out.addBinding(c.mapping.output.hotspot, 'radius', { min: 0.05, max: 1, step: 0.005 }).on('change', touch);
   out.addBinding(c.mapping.output.hotspot, 'strength', { min: 0, max: 1, step: 0.01 }).on('change', touch);
+
+  const ul = pane.addFolder({ title: 'Reference photo (edit mode only)', expanded: false });
+  ul.addButton({ title: 'Load photo of surface' }).on('click', hooks.onPickUnderlay);
+  ul.addButton({ title: 'Clear photo' }).on('click', hooks.onClearUnderlay);
+  ul.addBinding(c.underlay, 'visible').on('change', touch);
+  ul.addBinding(c.underlay, 'opacity', { min: 0, max: 1, step: 0.01 }).on('change', touch);
+  ul.addBinding(c.underlay, 'scale', { min: 0.1, max: 4, step: 0.005 }).on('change', touch);
+  ul.addBinding(c.underlay, 'x', { min: -2000, max: 2000, step: 1 }).on('change', touch);
+  ul.addBinding(c.underlay, 'y', { min: -2000, max: 2000, step: 1 }).on('change', touch);
 
   const io = pane.addFolder({ title: 'Config', expanded: true });
   io.addButton({ title: 'Export JSON (Ctrl+S)' }).on('click', () => downloadText('talking-head-config.json', store.exportJson()));

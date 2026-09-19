@@ -25,8 +25,9 @@ export class FaceRenderer {
     const L = cfg.layout;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, FACE_SIZE, FACE_SIZE);
+    // Transparent, not black: the output stage sits on a black page, and in edit mode a reference
+    // photo can show through behind the face.
+    ctx.clearRect(0, 0, FACE_SIZE, FACE_SIZE);
     ctx.translate(FACE_SIZE / 2, FACE_SIZE / 2);
 
     const alpha = clamp01(cfg.brightness * p.brightness);
@@ -35,6 +36,27 @@ export class FaceRenderer {
 
     // Additive so overlapping glows add up like light.
     ctx.globalCompositeOperation = 'lighter';
+
+    // --- Illumination wash: a soft ellipse of light under everything else.
+    if (cfg.wash.enabled && cfg.wash.opacity > 0) {
+      const w = cfg.wash;
+      let a = w.opacity * p.brightness * (1 + w.breathe * (p.glow - 1) * 4) + w.speechBoost * p.mouthOpen;
+      a = clamp01(a);
+      ctx.save();
+      ctx.translate(w.cx, w.cy);
+      ctx.scale(Math.max(1, w.rx), Math.max(1, w.ry));
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, w.color);
+      g.addColorStop(clamp01(1 - w.softness), w.color);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = a;
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -78,8 +100,8 @@ export class FaceRenderer {
         ctx.quadraticCurveTo(e.cx, cy - h * 2, e.cx + eyeR, cy);
         ctx.quadraticCurveTo(e.cx, cy + h * 2, e.cx - eyeR, cy);
       };
-      strokePath(almond);
-      if (e.open > 0.08) {
+      if (cfg.show.eyeOutline) strokePath(almond);
+      if (cfg.show.pupils && e.open > 0.08) {
         // Pupil clipped to the almond so it disappears behind the lid.
         ctx.save();
         ctx.beginPath();
@@ -104,7 +126,7 @@ export class FaceRenderer {
       const by = cy - eyeR * 0.55 - L.browOffset - e.brow;
       const inner = e.side; // inner end is toward the center
       const furrowTilt = p.browFurrow * 14;
-      strokePath(() => {
+      if (cfg.show.brows) strokePath(() => {
         const x0 = e.cx - eyeR * 1.05;
         const x1 = e.cx + eyeR * 1.05;
         const y0 = by + (inner < 0 ? furrowTilt : 0);
@@ -127,13 +149,13 @@ export class FaceRenderer {
     const open = p.mouthOpen * 90;
     const corner = -p.mouthSmile * 55; // negative = corners up (canvas y is down)
     const my = L.mouthY;
-    strokePath(() => {
+    if (cfg.show.mouth) strokePath(() => {
       ctx.moveTo(-mw, my + corner);
       ctx.quadraticCurveTo(0, my - open * 0.45 - corner * 0.6, mw, my + corner);
       ctx.moveTo(-mw, my + corner);
       ctx.quadraticCurveTo(0, my + open * 0.9 - corner * 0.6 + 3, mw, my + corner);
     });
-    if (open > 8) {
+    if (cfg.show.mouth && open > 8) {
       // Faint inner fill so an open mouth reads as a cavity, not two lines.
       fillPath(() => {
         ctx.moveTo(-mw, my + corner);

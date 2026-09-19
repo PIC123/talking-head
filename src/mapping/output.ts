@@ -42,8 +42,8 @@ export class OutputStage {
     ctx.setTransform(this.canvas.width / W, 0, 0, this.canvas.height / H, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
+    // Clear to transparent; the stage behind is black, and in edit mode the reference photo shows through.
+    ctx.clearRect(0, 0, W, H);
 
     // Base fit: the 1024 face square fills the shorter screen dimension, centered.
     const base = Math.min(W, H) / FACE_SIZE;

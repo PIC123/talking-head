@@ -8,6 +8,7 @@ import { MappingEditor, type Stage } from './mapping/editor';
 import { createLog } from './ui/log';
 import { createPanel } from './ui/panel';
 import { keepAwake, requestFullscreen, showStartOverlay } from './ui/start';
+import { Underlay } from './ui/underlay';
 import personaMd from '../config/persona.md?raw';
 
 const store = new ConfigStore();
@@ -38,6 +39,7 @@ const face = new FaceRenderer();
 const behavior = new BehaviorEngine();
 const out = new OutputStage(document.getElementById('out') as HTMLCanvasElement);
 const editor = new MappingEditor(store, document.getElementById('overlay')!, document.getElementById('hud')!);
+const underlay = new Underlay(store);
 
 let editMode = false;
 let testPattern = false;
@@ -51,7 +53,12 @@ function setEditMode(on: boolean): void {
   document.body.classList.toggle('edit', on);
   document.body.classList.toggle('show', !on);
   if (on && !panel) {
-    panel = createPanel(store, { onAgentChanged: () => void session.rebuild(), onFullscreen: () => void requestFullscreen() });
+    panel = createPanel(store, {
+      onAgentChanged: () => void session.rebuild(),
+      onFullscreen: () => void requestFullscreen(),
+      onPickUnderlay: () => void underlay.pick(),
+      onClearUnderlay: () => underlay.clear(),
+    });
   }
   if (panel) panel.hidden = !on;
 }
@@ -82,6 +89,10 @@ window.addEventListener('keydown', (e) => {
       break;
     case 'KeyF':
       void requestFullscreen();
+      break;
+    case 'KeyU':
+      store.cfg.underlay.visible = !store.cfg.underlay.visible;
+      store.touch();
       break;
     case 'KeyH':
       editor.pushUndo();

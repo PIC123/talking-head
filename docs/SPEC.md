@@ -13,6 +13,7 @@ The original spec follows below unchanged. These are the deliberate departures i
 - **Screen wake lock** is held in show mode; without it the display sleeps in under an hour on most laptops.
 - **Right mouse button is a second talk button**, so a cheap presenter clicker or a mouse with a long cable works without a footswitch.
 - **Output gamma** is dropped (not expressible in Canvas 2D cheaply); brightness and hotspot compensation remain.
+- **Painting mode.** A reference-photo underlay (edit mode only), per-feature visibility toggles, and an optional light-wash layer let the same app map onto a flat painting whose pale regions the projector animates.
 - **Gaze tracking (M6)** stays a stretch goal; the behavior engine already accepts an external gaze target.
 
 ---
