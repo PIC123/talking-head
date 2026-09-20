@@ -12,8 +12,10 @@ export interface Config {
     turnMode: TurnMode;
     /** Transport: auto tries WebRTC and falls back to WebSocket if it drops within seconds. */
     connection: Connection;
-    /** End the provider session after this much silence from both sides. */
+    /** Push-to-talk: end the session this long after the visitor's last press. Open mic: after silence from both sides. */
     sessionIdleTimeoutSec: number;
+    /** Hard cap on any single session, whatever is happening; 0 disables. */
+    maxSessionSec: number;
     /** Connect as soon as the Start overlay is dismissed (else on first talk press). */
     connectOnStart: boolean;
   };
@@ -98,6 +100,7 @@ export const defaultConfig = (): Config => ({
     turnMode: 'pushToTalk',
     connection: 'auto',
     sessionIdleTimeoutSec: 45,
+    maxSessionSec: 300,
     connectOnStart: false,
   },
   face: {

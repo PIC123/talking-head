@@ -26,6 +26,7 @@ export class SessionManager {
   /** Set once WebRTC failed fast in 'auto' mode; later sessions use WebSocket. Remembered per tab. */
   private wsFallback = sessionStorage.getItem('talking-head:wsFallback') === '1';
   private connectedAt = -1;
+  private sessionStartedAt = -1;
 
   constructor(
     private getConfig: () => Config,
@@ -117,12 +118,17 @@ export class SessionManager {
       if (this.wantConnected || this.agentState !== 'disconnected') void this.endSession('paused');
       return;
     }
-    if (this.agentState === 'listening' || this.agentState === 'speaking' || this.agentState === 'thinking') {
-      this.lastActivity = performance.now();
-    }
-    const keepAlive = c.turnMode === 'openMic' || c.provider === 'micloop' || c.connectOnStart;
+    // In push-to-talk only the visitor's presses count as activity. The agent re-engaging on its
+    // own ("still there?") must not keep a session alive, or an abandoned head talks to itself
+    // until the credits run out. In open mic, any speech from either side counts.
+    const busy = this.agentState === 'listening' || this.agentState === 'speaking' || this.agentState === 'thinking';
+    if (busy && (c.turnMode === 'openMic' || this.talkHeld)) this.lastActivity = performance.now();
+    const keepAlive = c.provider === 'micloop' || c.connectOnStart;
     if (this.wantConnected && !keepAlive && !this.talkHeld && this.msSinceActivity() > c.sessionIdleTimeoutSec * 1000) {
       void this.endSession('idle timeout');
+    }
+    if (this.wantConnected && c.maxSessionSec > 0 && this.sessionStartedAt > 0 && performance.now() - this.sessionStartedAt > c.maxSessionSec * 1000) {
+      void this.endSession(`max session length (${c.maxSessionSec}s)`);
     }
   }
 
@@ -193,6 +199,7 @@ export class SessionManager {
   }
 
   private requestConnect(): void {
+    if (!this.wantConnected) this.sessionStartedAt = performance.now();
     this.wantConnected = true;
     this.lastActivity = performance.now();
     void this.connectNow();

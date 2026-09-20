@@ -27,6 +27,7 @@ export function createPanel(store: ConfigStore, hooks: PanelHooks): Pane {
     .on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'connectOnStart').on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'sessionIdleTimeoutSec', { min: 10, max: 300, step: 5 }).on('change', touch);
+  agent.addBinding(c.agent, 'maxSessionSec', { min: 0, max: 1800, step: 30 }).on('change', touch);
 
   const face = pane.addFolder({ title: 'Face', expanded: false });
   face.addBinding(c.face, 'color').on('change', touch);

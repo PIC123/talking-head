@@ -111,8 +111,9 @@ Save the painting and mask setups as presets (Ctrl+1 / Ctrl+2) and switch with A
 ElevenLabs bills agent time per minute of open conversation, including silence. Three things control the spend:
 
 - **Pause (P, or the "paused" tick in the Agent folder)** while you set up. Nothing connects, no matter what gets pressed. The HUD shows PAUSED.
-- **Idle timeout** (Agent folder, default 45 s) is how long a session lingers after the last word from either side. Shorter saves money; too short cuts off slow visitors.
-- **On the agent itself**, set a maximum conversation duration and a sensible turn timeout, so an abandoned session ends on their side too.
+- **Idle timeout** (Agent folder, default 45 s). In push-to-talk it counts from the visitor's last press; the agent talking to itself does not keep a session alive. In open mic it counts from the last speech on either side. Shorter saves money; too short cuts off slow visitors.
+- **Max session** (Agent folder, default 300 s) ends any session that has run that long, whatever is happening.
+- **On the agent at ElevenLabs**, under the agent's Advanced settings: raise **Turn timeout** well above your idle timeout (or disable it) so the agent does not re-engage into a muted mic every few seconds, and set **Silence end call timeout** to something like 60 s as a server-side backstop. Also set a **max conversation duration**.
 
 ## Show mode and robustness
 
