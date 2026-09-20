@@ -62,10 +62,12 @@ export async function runDiagnostics(cfg: Config, log: Logger): Promise<void> {
   log('info', '--- end diagnostics ---');
 }
 
-function micHint(name: string): string {
+export function micHint(name: string): string {
   switch (name) {
     case 'NotAllowedError':
-      return 'The browser is blocking the mic for this site. iPhone: Settings > Safari > Microphone, or the "aA" menu > Website Settings. Android/Chrome: tap the lock icon in the address bar > Permissions. Then reload.';
+    case 'PermissionDeniedError':
+    case 'SecurityError':
+      return 'The browser is blocking the microphone for this site. Desktop Chrome: click the icon left of the address bar > Site settings > Microphone > Allow. Android Chrome: lock icon > Permissions > Microphone. iPhone Safari: "aA" menu > Website Settings > Microphone > Allow. Then reload the page.';
     case 'NotFoundError':
       return 'No microphone device was found.';
     case 'NotReadableError':
@@ -108,4 +110,16 @@ export async function copyLog(el: HTMLElement): Promise<boolean> {
     ta.remove();
     return ok;
   }
+}
+
+/**
+ * Classify a microphone failure: 'denied' (retrying only re-prompts), 'missing' (no device or
+ * device busy), or null when the error is not about the mic at all.
+ */
+export function micErrorKind(e: unknown): 'denied' | 'missing' | null {
+  const name = (e as { name?: string })?.name ?? '';
+  const msg = String((e as { message?: string })?.message ?? e ?? '');
+  if (/NotAllowedError|PermissionDeniedError|SecurityError/.test(name) || /permission denied|not allowed by the user agent|denied permission/i.test(msg)) return 'denied';
+  if (/NotFoundError|NotReadableError|OverconstrainedError|DevicesNotFoundError/.test(name) || /requested device not found|could not start audio source/i.test(msg)) return 'missing';
+  return null;
 }

@@ -45,7 +45,11 @@ export class ElevenLabsAgent extends BaseAgent {
         onError: (message, context) => this.emitError(new Error(`${message} ${context ? JSON.stringify(context) : ''}`)),
         onDisconnect: (details) => {
           this.conv = null;
-          if (details.reason !== 'user') {
+          const clientTeardown = details.reason === 'agent' && /CLIENT_INITIATED/i.test(String(details.context?.reason ?? ''));
+          if (clientTeardown) {
+            // The SDK closes the room itself when setup fails (typically the mic); the real error follows.
+            this.opts.log?.('connection closed during setup (client-initiated); see the next line for the cause');
+          } else if (details.reason !== 'user') {
             const bits = [
               'message' in details ? details.message : '',
               details.context?.reason ? `reason: ${details.context.reason}` : '',

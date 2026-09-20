@@ -2,6 +2,7 @@ import type { Config } from '../config/schema';
 import type { AgentAudioLevel, AgentState, TranscriptLine, VoiceAgent } from './types';
 import { ElevenLabsAgent } from './elevenlabs';
 import { EchoAgent, MicLoopAgent } from './micLoop';
+import { micErrorKind, micHint } from '../ui/diagnostics';
 
 export type Logger = (kind: 'info' | 'err' | 'agent' | 'user', text: string) => void;
 
@@ -186,6 +187,15 @@ export class SessionManager {
       if (this.talkHeld) this.agent.setMicEnabled(true);
     } catch (e) {
       this.connecting = false;
+      const mic = micErrorKind(e);
+      if (mic) {
+        // Retrying would only re-prompt (and dismissed prompts get the site auto-blocked) or fail the
+        // same way without a device. Wait for the next talk press instead.
+        this.wantConnected = false;
+        const name = (e as { name?: string })?.name ?? '';
+        this.log('err', mic === 'denied' ? `MICROPHONE BLOCKED. ${micHint('NotAllowedError')}` : `MICROPHONE UNAVAILABLE (${name}). ${micHint(name) || 'Check the input device in the OS sound settings.'}`);
+        return;
+      }
       if (this.wantConnected) {
         this.considerTransportFallback();
         this.scheduleRetry();

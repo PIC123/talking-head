@@ -1,7 +1,11 @@
+import { micHint } from './diagnostics';
+
 /** One click to unlock audio, grant the mic, go fullscreen and hide the cursor. */
 export function showStartOverlay(onStart: () => void): void {
   const el = document.getElementById('start')!;
   const btn = document.getElementById('start-btn')!;
+  const note = el.querySelector('p')!;
+  let warned = false;
   const go = async () => {
     btn.textContent = '...';
     try {
@@ -9,7 +13,19 @@ export function showStartOverlay(onStart: () => void): void {
       const s = await navigator.mediaDevices.getUserMedia({ audio: true });
       s.getTracks().forEach((t) => t.stop());
     } catch (e) {
-      console.warn('mic permission not granted yet', e);
+      const err = e as DOMException;
+      console.warn('mic permission not granted', err);
+      if (!warned) {
+        // Say it here, on the screen the person is looking at, instead of failing quietly later.
+        warned = true;
+        note.textContent = `Microphone ${err.name}: ${err.message || ''} ${micHint(err.name)}`;
+        note.style.color = '#ff6b6b';
+        note.style.maxWidth = '80vw';
+        note.style.textAlign = 'center';
+        btn.textContent = 'Continue anyway';
+        btn.addEventListener('click', go, { once: true });
+        return;
+      }
     }
     el.remove();
     onStart();
