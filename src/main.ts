@@ -35,6 +35,11 @@ const store = new ConfigStore();
     store.cfg.agent.provider = 'elevenlabs';
     store.touch();
   }
+  // ?ws forces the WebSocket transport, ?rtc forces WebRTC (otherwise auto).
+  if (params.has('ws') || params.has('rtc')) {
+    store.cfg.agent.connection = params.has('ws') ? 'websocket' : 'webrtc';
+    store.touch();
+  }
 }
 
 const logEl = document.getElementById('log')!;

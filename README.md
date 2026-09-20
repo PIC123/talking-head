@@ -19,7 +19,7 @@ npm run dev        # http://localhost:5173  (mic works on localhost without HTTP
 3. Switch provider to **Echo** to test the whole turn loop with no API: hold Space, talk, release, and the head "thinks" then plays your recording back through the mouth.
 4. Switch provider to **ElevenLabs**, paste your agent ID, press E to leave edit mode, hold Space and talk.
 
-URL parameters: `?windowed` skips auto-fullscreen, `?edit` starts in edit mode, `?agent=<id>` sets the ElevenLabs agent ID (handy for a kiosk launch command), `?control` opens the remote-control tab, `?debug` the phone-friendly self-test view (see below).
+URL parameters: `?windowed` skips auto-fullscreen, `?edit` starts in edit mode, `?agent=<id>` sets the ElevenLabs agent ID (handy for a kiosk launch command), `?control` opens the remote-control tab, `?debug` the phone-friendly self-test view (see below), `?ws` / `?rtc` force the WebSocket / WebRTC transport.
 
 ## ElevenLabs setup
 
