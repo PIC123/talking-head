@@ -2,6 +2,19 @@ import { VoiceConversation, type Mode, type Status } from '@elevenlabs/client';
 import { BaseAgent, type AgentAudioLevel } from './types';
 import { levelFromFrequencyData } from '../audio/analyzer';
 
+type Details = Parameters<NonNullable<Parameters<typeof VoiceConversation.startSession>[0]['onDisconnect']>>[0];
+
+function detailText(details: Details): string {
+  const bits = [
+    'message' in details ? details.message : '',
+    'context' in details && details.context?.reason ? `reason: ${details.context.reason}` : '',
+    'context' in details && details.context?.type ? `type: ${details.context.type}` : '',
+    'closeCode' in details && details.closeCode !== undefined ? `code ${details.closeCode}` : '',
+    'closeReason' in details && details.closeReason ? details.closeReason : '',
+  ].filter(Boolean);
+  return bits.join(', ') || 'no detail given';
+}
+
 export interface ElevenLabsOptions {
   agentId: string;
   /** Keep the mic muted except while talk is held. */
@@ -33,6 +46,9 @@ export class ElevenLabsAgent extends BaseAgent {
     if (this.conv) return;
     if (!this.opts.agentId) throw new Error('ElevenLabs agent ID is empty (set it in the edit panel or config)');
     this.setState('connecting');
+    // A drop that arrives while startSession is still running (media failed after signaling
+    // connected) must fail the connect, or we would hold a dead conversation forever.
+    let droppedDuringSetup: string | null = null;
     try {
       const conv = await VoiceConversation.startSession({
         agentId: this.opts.agentId,
@@ -44,26 +60,28 @@ export class ElevenLabsAgent extends BaseAgent {
         onModeChange: ({ mode }) => this.onMode(mode),
         onError: (message, context) => this.emitError(new Error(`${message} ${context ? JSON.stringify(context) : ''}`)),
         onDisconnect: (details) => {
+          const inSetup = this.conv === null;
           this.conv = null;
+          if (inSetup) {
+            droppedDuringSetup = detailText(details);
+            return;
+          }
           const clientTeardown = details.reason === 'agent' && /CLIENT_INITIATED/i.test(String(details.context?.reason ?? ''));
           if (clientTeardown) {
             // The SDK closes the room itself when setup fails (typically the mic); the real error follows.
             this.opts.log?.('connection closed during setup (client-initiated); see the next line for the cause');
           } else if (details.reason !== 'user') {
-            const bits = [
-              'message' in details ? details.message : '',
-              details.context?.reason ? `reason: ${details.context.reason}` : '',
-              details.context?.type ? `type: ${details.context.type}` : '',
-              details.closeCode !== undefined ? `code ${details.closeCode}` : '',
-              details.closeReason ? details.closeReason : '',
-            ].filter(Boolean);
-            this.emitError(new Error(`disconnected by ${details.reason} (${bits.join(', ') || 'no detail given'})`));
+            this.emitError(new Error(`disconnected by ${details.reason} (${detailText(details)})`));
           }
           this.setState('disconnected');
         },
         onMessage: ({ role, message }) => this.emitTranscript(role, message),
         onInterruption: () => this.clearThinking(),
       });
+      if (droppedDuringSetup !== null || !conv.isOpen()) {
+        await conv.endSession().catch(() => {});
+        throw new Error(`connection dropped during setup over ${this.opts.connectionType} (${droppedDuringSetup ?? 'closed'})`);
+      }
       this.conv = conv;
       conv.setMicMuted(this.opts.pushToTalk && !this.micHeld);
       if (this.state === 'connecting') this.setState(this.derive());

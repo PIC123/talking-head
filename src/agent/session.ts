@@ -23,8 +23,8 @@ export class SessionManager {
   private agentState: AgentState = 'disconnected';
   private personaPrompt: string | undefined;
   private stateCb: (s: AgentState) => void = () => {};
-  /** Set once WebRTC failed fast in 'auto' mode; later sessions use WebSocket. */
-  private wsFallback = false;
+  /** Set once WebRTC failed fast in 'auto' mode; later sessions use WebSocket. Remembered per tab. */
+  private wsFallback = sessionStorage.getItem('talking-head:wsFallback') === '1';
   private connectedAt = -1;
 
   constructor(
@@ -163,7 +163,12 @@ export class SessionManager {
     if (!quick) return;
     this.wsFallback = true;
     this.agent = null; // next connect builds a WebSocket agent
-    this.log('info', 'WebRTC failed quickly; switching to WebSocket transport');
+    try {
+      sessionStorage.setItem('talking-head:wsFallback', '1');
+    } catch {
+      /* ignore */
+    }
+    this.log('info', 'WebRTC failed quickly; switching to WebSocket transport for this tab');
   }
 
   private requestConnect(): void {
@@ -197,8 +202,10 @@ export class SessionManager {
         return;
       }
       if (this.wantConnected) {
+        const before = this.wsFallback;
         this.considerTransportFallback();
-        this.scheduleRetry();
+        if (this.wsFallback && !before) void this.connectNow(); // switch transports without waiting
+        else this.scheduleRetry();
       }
     }
   }
