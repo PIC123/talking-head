@@ -7,6 +7,8 @@ export interface Config {
   agent: {
     provider: Provider;
     agentId: string;
+    /** Paused: talk presses are ignored and no session is opened, so no credits are used. */
+    paused: boolean;
     turnMode: TurnMode;
     /** Transport: auto tries WebRTC and falls back to WebSocket if it drops within seconds. */
     connection: Connection;
@@ -92,6 +94,7 @@ export const defaultConfig = (): Config => ({
   agent: {
     provider: 'micloop',
     agentId: '',
+    paused: false,
     turnMode: 'pushToTalk',
     connection: 'auto',
     sessionIdleTimeoutSec: 45,

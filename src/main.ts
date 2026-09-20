@@ -106,9 +106,10 @@ sync.on((m) => {
       }
       break;
     case 'config': {
-      const agentBefore = JSON.stringify(store.cfg.agent);
+      const agentKey = (a: typeof store.cfg.agent) => JSON.stringify({ ...a, paused: undefined });
+      const agentBefore = agentKey(store.cfg.agent);
       store.applyRemote(m.cfg);
-      if (!isControl && JSON.stringify(store.cfg.agent) !== agentBefore) session.rebuild();
+      if (!isControl && agentKey(store.cfg.agent) !== agentBefore) session.rebuild();
       break;
     }
     case 'ui':
@@ -131,6 +132,12 @@ sync.on((m) => {
       break;
   }
 });
+
+function togglePause(): void {
+  store.cfg.agent.paused = !store.cfg.agent.paused;
+  store.touch();
+  log('info', store.cfg.agent.paused ? 'PAUSED: no sessions will be opened (no credits used)' : 'resumed');
+}
 
 /** In the control tab, talk and overlay keys act on the face window instead of here. */
 const talkBtn = document.getElementById('talk') as HTMLButtonElement;
@@ -207,6 +214,9 @@ window.addEventListener('keydown', (e) => {
     case 'KeyU':
       store.cfg.underlay.visible = !store.cfg.underlay.visible;
       store.touch();
+      break;
+    case 'KeyP':
+      togglePause();
       break;
     case 'KeyH':
       editor.pushUndo();
@@ -339,7 +349,7 @@ function frame(now: number): void {
       fpsN = 0;
     }
     const l = session.getLevel();
-    let status = `${fps} fps  state=${session.getAgentState()}  talk=${session.isTalkHeld() ? 'HELD' : '-'}  level=${l.level.toFixed(2)} mouth=${params.mouthOpen.toFixed(2)}  idle=${Math.round(session.msSinceActivity() / 1000)}s`;
+    let status = `${session.isPaused() ? 'PAUSED  ' : ''}${fps} fps  state=${session.getAgentState()}  talk=${session.isTalkHeld() ? 'HELD' : '-'}  level=${l.level.toFixed(2)} mouth=${params.mouthOpen.toFixed(2)}  idle=${Math.round(session.msSinceActivity() / 1000)}s`;
     if (!started) status += '\nFACE WINDOW NOT STARTED: click Start there first, or its audio stays blocked';
     if (editMode || isDebug) editor.updateHud(status);
     statusAcc += dt;
@@ -365,6 +375,7 @@ if (isDebug) {
     const ok = await copyLog(logEl);
     log('info', ok ? 'log copied to clipboard' : 'copy failed; long-press the log to select it');
   });
+  document.getElementById('dbg-pause')!.addEventListener('click', togglePause);
   document.getElementById('dbg-reconnect')!.addEventListener('click', () => {
     session.rebuild();
     session.pressTalk();

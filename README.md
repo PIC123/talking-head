@@ -51,6 +51,7 @@ The mic needs a secure context, which both `localhost` and Vercel's HTTPS satisf
 | Key | Action |
 | --- | --- |
 | Space (hold), right mouse button (hold), finger on screen (hold, show mode), or the HOLD TO TALK button (edit mode / control tab) | Push to talk |
+| P | Pause / resume the agent. Paused, talk presses are ignored and any open session ends at once, so no credits are used while you map or rehearse. The face keeps its idle animation. |
 | E | Toggle edit mode (panel, HUD, log, cursor) |
 | T | Toggle test pattern (grid, crosshair, circle, orientation marks) |
 | F | Toggle fullscreen |
@@ -104,6 +105,14 @@ The same app maps onto a flat painting instead of a mask. Three things make that
 - **Light wash.** *Face → Light wash* adds a soft colored ellipse under the features so the projector lights the painting from within. It breathes in idle, brightens on speech and dims when disconnected. Warm off-white at 0.3 to 0.5 opacity in a dim room is a good start.
 
 Save the painting and mask setups as presets (Ctrl+1 / Ctrl+2) and switch with Alt+1 / Alt+2.
+
+## Keeping credits down
+
+ElevenLabs bills agent time per minute of open conversation, including silence. Three things control the spend:
+
+- **Pause (P, or the "paused" tick in the Agent folder)** while you set up. Nothing connects, no matter what gets pressed. The HUD shows PAUSED.
+- **Idle timeout** (Agent folder, default 45 s) is how long a session lingers after the last word from either side. Shorter saves money; too short cuts off slow visitors.
+- **On the agent itself**, set a maximum conversation duration and a sensible turn timeout, so an abandoned session ends on their side too.
 
 ## Show mode and robustness
 

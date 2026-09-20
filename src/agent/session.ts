@@ -62,14 +62,23 @@ export class SessionManager {
     return performance.now() - this.lastActivity;
   }
 
+  isPaused(): boolean {
+    return this.getConfig().agent.paused;
+  }
+
   /** Called once after the Start overlay. */
   start(): void {
     const c = this.getConfig().agent;
+    if (c.paused) return;
     if (c.connectOnStart || c.turnMode === 'openMic' || c.provider === 'micloop') this.requestConnect();
   }
 
   pressTalk(): void {
     if (this.talkHeld) return;
+    if (this.isPaused()) {
+      this.log('info', 'paused: talk ignored (press P or untick "paused" to resume)');
+      return;
+    }
     this.talkHeld = true;
     this.lastActivity = performance.now();
     if (!this.agent || this.agentState === 'disconnected') this.requestConnect();
@@ -104,6 +113,10 @@ export class SessionManager {
   /** Call once per frame. */
   tick(): void {
     const c = this.getConfig().agent;
+    if (c.paused) {
+      if (this.wantConnected || this.agentState !== 'disconnected') void this.endSession('paused');
+      return;
+    }
     if (this.agentState === 'listening' || this.agentState === 'speaking' || this.agentState === 'thinking') {
       this.lastActivity = performance.now();
     }
