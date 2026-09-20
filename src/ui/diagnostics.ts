@@ -51,7 +51,7 @@ export async function runDiagnostics(cfg: Config, log: Logger): Promise<void> {
     const ms = Math.round(performance.now() - t0);
     const body = (await res.text()).slice(0, 300);
     if (res.ok) {
-      log('info', `ElevenLabs token: OK (${res.status}, ${ms} ms). The agent is public and reachable.`);
+      log('info', `ElevenLabs token: OK (${res.status}, ${ms} ms). The agent is public and reachable. Credits are only checked when a conversation starts, so press talk to test that.`);
     } else {
       log('err', `ElevenLabs token: HTTP ${res.status} (${ms} ms): ${body}`);
       log('err', tokenHint(res.status));

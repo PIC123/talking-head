@@ -135,7 +135,15 @@ export class SessionManager {
     agent.onState((s) => {
       if (this.agent === agent) this.handleState(s);
     });
-    agent.onError((e) => this.log('err', e.message));
+    agent.onError((e) => {
+      this.log('err', e.message);
+      if (/quota_exceeded|run out of credits|max_duration_exceeded|unauthorized|\b401\b|\b403\b/i.test(e.message)) {
+        // Terminal from the server's side; retrying only repeats the message. The next press tries again.
+        this.wantConnected = false;
+        window.clearTimeout(this.retryTimer);
+        this.log('err', 'not retrying: fix this on the ElevenLabs side (credits, plan or agent security), then press talk again');
+      }
+    });
     agent.onTranscript((l: TranscriptLine) => this.log(l.role, l.text));
     return agent;
   }
