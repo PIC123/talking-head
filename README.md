@@ -115,6 +115,10 @@ ElevenLabs bills agent time per minute of open conversation, including silence. 
 - **Max session** (Agent folder, default 300 s) ends any session that has run that long, whatever is happening.
 - **On the agent at ElevenLabs**, under the agent's Advanced settings: raise **Turn timeout** well above your idle timeout (or disable it) so the agent does not re-engage into a muted mic every few seconds, and set **Silence end call timeout** to something like 60 s as a server-side backstop. Also set a **max conversation duration**.
 
+## Building the rig
+
+`docs/rig.html` is an interactive 3D planner for the folded rear-projection box: mask size, projector throw ratio, lens offset and wall thickness in, exterior dimensions, mirror size, a cut list and focus checks out. Open it in any browser (it loads three.js from a CDN) and use **Copy STL** to take the geometry into CAD or a slicer.
+
 ## Show mode and robustness
 
 - One click on Start, then the app runs unattended: fullscreen, no cursor, screen wake lock held.
