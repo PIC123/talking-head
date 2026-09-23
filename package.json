@@ -7,16 +7,20 @@
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "relay": "node --env-file-if-exists=.env server/relay.mjs",
+    "relay:mock": "node server/relay.mjs --mock"
   },
   "devDependencies": {
     "@tweakpane/core": "^2.0.5",
     "@types/node": "^26.6.2",
+    "@types/ws": "^8.18.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.0"
   },
   "dependencies": {
     "@elevenlabs/client": "^1.25.0",
-    "tweakpane": "^4.0.5"
+    "tweakpane": "^4.0.5",
+    "ws": "^8.21.3"
   }
 }

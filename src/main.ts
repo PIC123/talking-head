@@ -35,6 +35,12 @@ const store = new ConfigStore();
     store.cfg.agent.provider = 'elevenlabs';
     store.touch();
   }
+  // ?muse switches to the Meta Muse relay provider (optionally ?relay=ws://host:port).
+  if (params.has('muse')) {
+    store.cfg.agent.provider = 'muse';
+    if (params.get('relay')) store.cfg.agent.relayUrl = params.get('relay')!;
+    store.touch();
+  }
   // ?ws forces the WebSocket transport, ?rtc forces WebRTC (otherwise auto).
   if (params.has('ws') || params.has('rtc')) {
     store.cfg.agent.connection = params.has('ws') ? 'websocket' : 'webrtc';

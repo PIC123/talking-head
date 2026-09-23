@@ -2,6 +2,7 @@ import type { Config } from '../config/schema';
 import type { AgentAudioLevel, AgentState, TranscriptLine, VoiceAgent } from './types';
 import { ElevenLabsAgent } from './elevenlabs';
 import { EchoAgent, MicLoopAgent } from './micLoop';
+import { MuseAgent } from './muse';
 import { micErrorKind, micHint } from '../ui/diagnostics';
 
 export type Logger = (kind: 'info' | 'err' | 'agent' | 'user', text: string) => void;
@@ -144,6 +145,9 @@ export class SessionManager {
           connectionType: c.connection === 'auto' ? (this.wsFallback ? 'websocket' : 'webrtc') : c.connection,
           log: (t) => this.log('info', t),
         });
+        break;
+      case 'muse':
+        agent = new MuseAgent({ relayUrl: c.relayUrl, pushToTalk: c.turnMode === 'pushToTalk' });
         break;
       case 'echo':
         agent = new EchoAgent();

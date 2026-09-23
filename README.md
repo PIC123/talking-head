@@ -46,6 +46,23 @@ npm run build && npm run preview   # http://localhost:4173
 
 The mic needs a secure context, which both `localhost` and Vercel's HTTPS satisfy. A LAN IP over plain HTTP will not get mic access.
 
+## Meta Muse provider (relay)
+
+An alternative to ElevenLabs that runs on Meta Model API: Muse Voice Transcribe for ears, Muse Spark for the brain, and a pluggable voice. It needs a small relay process next to the browser, because the API key must not live in the page and Vercel cannot host WebSockets.
+
+```bash
+cp .env.example .env        # add META_API_KEY, and a voice (ELEVENLABS_API_KEY or TTS_URL)
+npm run relay               # ws://127.0.0.1:8787
+```
+
+Then open the app with `?muse` (or set provider to "Meta Muse (relay)" in the panel) and talk as usual. Push-to-talk opens one transcription stream per turn; open mic keeps one stream and lets the model's endpointing decide turns, with barge-in when the visitor talks over the head.
+
+- **No key yet?** `npm run relay:mock` runs the same pipeline with a fake brain that hands your own voice back, so the browser side, states and mouth can be tested offline.
+- **Voice.** Meta has no text-to-speech on the API yet. `TTS_PROVIDER=elevenlabs` uses ElevenLabs' plain TTS (your existing account), `custom` POSTs `{text, sampleRate}` to `TTS_URL` and expects raw PCM16 mono 24 kHz back (the slot for an internal Meta voice), `none` keeps the head silent but thinking.
+- **Phone or another machine.** Run the relay with `HOST=0.0.0.0` and open the app with `?muse&relay=ws://<laptop-ip>:8787`. Browsers require `wss://` from an `https://` page, so from the Vercel URL you need a TLS proxy in front of the relay; from `npm run dev` on the laptop, plain `ws://` is fine.
+- **Persona and memory.** The relay sends `config/persona.md` as the system prompt and keeps the last 12 turns per connection. A shared event-long story is a few lines here: keep a running summary and prepend it.
+- **Debugging.** `DEBUG=1 npm run relay` logs every message; the app's `?debug` page checks that the relay answers.
+
 ## Keyboard map
 
 | Key | Action |
@@ -141,7 +158,8 @@ google-chrome --kiosk --autoplay-policy=no-user-gesture-required \
 
 | Module | Responsibility |
 | --- | --- |
-| `src/agent/` | `VoiceAgent` interface, ElevenLabs adapter, `MicLoopAgent` and `EchoAgent` test adapters, `SessionManager` (connect on demand, idle timeout, reconnect). |
+| `src/agent/` | `VoiceAgent` interface, ElevenLabs adapter, `MuseAgent` (talks to the relay), `MicLoopAgent` and `EchoAgent` test adapters, `SessionManager` (connect on demand, idle timeout, reconnect). |
+| `server/relay.mjs` | Node relay for the Meta Muse provider: Voice Transcribe over WebSocket, Muse Spark streaming, sentence-chunked text-to-speech, mock mode. |
 | `src/audio/analyzer.ts` | Frequency data to loudness + brightness. |
 | `src/behavior/` | Mouth envelope follower; behavior engine turning state + level into `FaceParams` (blinks, saccades, brows, glow). |
 | `src/face/` | Draws `FaceParams` to a 1024×1024 canvas; test pattern. |

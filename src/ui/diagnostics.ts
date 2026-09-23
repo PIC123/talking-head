@@ -34,6 +34,15 @@ export async function runDiagnostics(cfg: Config, log: Logger): Promise<void> {
   // Agent
   const a = cfg.agent;
   log('info', `agent config: provider=${a.provider} turn=${a.turnMode} connection=${a.connection} id=${a.agentId ? a.agentId.slice(0, 12) + '…' : '(EMPTY)'}`);
+  if (a.provider === 'muse') {
+    await new Promise<void>((resolve) => {
+      const ws = new WebSocket(a.relayUrl);
+      const t = setTimeout(() => { ws.close(); log('err', `relay at ${a.relayUrl} did not answer in 3 s. Start it with: npm run relay (or npm run relay:mock)`); resolve(); }, 3000);
+      ws.onopen = () => { clearTimeout(t); log('info', `relay OK at ${a.relayUrl}`); ws.close(); resolve(); };
+      ws.onerror = () => { clearTimeout(t); log('err', `relay not reachable at ${a.relayUrl}. Start it with: npm run relay (or npm run relay:mock). From a phone, use the laptop's LAN address and HOST=0.0.0.0.`); resolve(); };
+    });
+    return;
+  }
   if (a.provider !== 'elevenlabs') {
     log('info', 'provider is not ElevenLabs; token check skipped');
     return;
