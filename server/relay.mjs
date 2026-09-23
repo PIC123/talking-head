@@ -327,13 +327,27 @@ const http = createServer(async (req, res) => {
 const wss = new WebSocketServer({ server: http });
 wss.on('connection', (ws, req) => {
   const s = new Session(ws);
-  log('face connected from', req.socket.remoteAddress);
+  log('face connected from', req.headers['x-forwarded-for'] ?? req.socket.remoteAddress);
+  ws.isAlive = true;
+  ws.on('pong', () => (ws.isAlive = true));
   ws.on('message', (d, b) => s.onMessage(d, b).catch((e) => s.send({ type: 'error', message: e.message })));
   ws.on('close', () => {
     s.close();
     log('face disconnected');
   });
 });
+// Keepalive: hosted ingresses (Azure Container Apps, load balancers) drop idle connections after a
+// few minutes; a ping every 25 s keeps an idle face attached. Browsers answer pings automatically.
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}, 25000).unref();
 http.listen(PORT, HOST, () => {
   log(`relay on ws://${HOST}:${PORT} (+ POST /turn)  mode=${MOCK ? 'MOCK' : 'live'}  llm=${LLM_MODEL}  asr=${ASR_MODEL}  tts=${TTS}  auth=${RELAY_TOKEN ? 'token' : 'none'}`);
 });

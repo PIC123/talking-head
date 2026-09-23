@@ -87,7 +87,7 @@ Latency is a little higher than the WebSocket relay because transcription starts
 
 Open-mic mode needs streaming speech-to-text with the model's own endpointing, which needs a long-lived process. Vercel, Azure Functions and Supabase Edge Functions do not fit that; a small container does. The relay ships with a `Dockerfile`, a `fly.toml` and `npm start`, and also serves `POST /turn` for push-to-talk clients.
 
-- **Azure Container Apps** (already in your account): create a container app from the Dockerfile, set min replicas 0 and the env vars below, and use its `https://` hostname as `wss://...` in the app.
+- **Azure Container Apps**: see `docs/azure.md` for the exact commands. Builds the Dockerfile in Azure, scales to zero, WebSockets on the HTTPS hostname. A GitHub Actions workflow (`.github/workflows/deploy-relay-azure.yml`) redeploys on push once its secrets are set.
 - **Fly.io**: `fly launch --no-deploy`, `fly secrets set META_API_KEY=... ELEVENLABS_API_KEY=... ELEVENLABS_VOICE_ID=... RELAY_TOKEN=...`, `fly deploy`. About $2 a month, scales to zero.
 - **Railway or Render**: connect the repo, start command `npm start`, same variables.
 

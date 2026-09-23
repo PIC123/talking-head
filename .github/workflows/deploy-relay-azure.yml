@@ -1,0 +1,26 @@
+# Rebuilds the relay image and rolls it out to Azure Container Apps.
+# Runs on demand, and on pushes that touch the server. Needs these repository settings:
+#   secret  AZURE_CREDENTIALS      service principal JSON from: az ad sp create-for-rbac --sdk-auth ...
+#   variable AZURE_RESOURCE_GROUP  e.g. talking-head-rg
+#   variable AZURE_CONTAINERAPP    e.g. talking-head-relay
+#   variable AZURE_ACR             registry name without .azurecr.io
+name: Deploy relay to Azure Container Apps
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['server/**', 'config/persona.md', 'Dockerfile', 'package.json', 'package-lock.json', '.github/workflows/deploy-relay-azure.yml']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Build image in Azure Container Registry
+        run: az acr build --registry "${{ vars.AZURE_ACR }}" --image talking-head-relay:${{ github.sha }} --image talking-head-relay:latest .
+      - name: Roll out to the container app
+        run: az containerapp update --name "${{ vars.AZURE_CONTAINERAPP }}" --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --image "${{ vars.AZURE_ACR }}.azurecr.io/talking-head-relay:${{ github.sha }}"
