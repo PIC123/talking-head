@@ -186,11 +186,24 @@ const isTyping = (e: KeyboardEvent) => {
   return !!t && isTextField(t);
 };
 
+const isTalkKey = (code: string) =>
+  code === 'Space' || store.cfg.agent.talkKeys.split(',').map((k) => k.trim()).filter(Boolean).includes(code);
+let toggledOn = false;
+/** Hold mode: press/release follow the key. Toggle mode: one press starts, the next stops. */
+const talkKeyDown = () => {
+  if (!store.cfg.agent.talkToggle) return talkPress();
+  toggledOn = !toggledOn;
+  toggledOn ? talkPress() : talkRelease();
+};
+const talkKeyUp = () => {
+  if (!store.cfg.agent.talkToggle) talkRelease();
+};
+
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') {
+  if (isTalkKey(e.code)) {
     if (isTyping(e)) return;
     e.preventDefault();
-    if (!e.repeat) talkPress();
+    if (!e.repeat) talkKeyDown();
     return;
   }
   if (isTyping(e)) return;
@@ -299,10 +312,12 @@ window.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('keyup', (e) => {
-  if (e.code === 'Space') talkRelease();
+  if (isTalkKey(e.code)) talkKeyUp();
 });
-// Never leave the mic open if the key-up is lost (window blur, fullscreen change).
-window.addEventListener('blur', () => talkRelease());
+// Never leave the mic open if the key-up is lost (window blur, fullscreen change); toggle mode keeps going.
+window.addEventListener('blur', () => {
+  if (!store.cfg.agent.talkToggle) talkRelease();
+});
 // Pointer-based talk: hold the right mouse button (presenter clicker), or on a touch screen
 // hold a finger anywhere in show mode. Edit mode keeps touch free for the panel and handles.
 window.addEventListener('contextmenu', (e) => e.preventDefault());

@@ -9,6 +9,10 @@ export interface Config {
     agentId: string;
     /** Paused: talk presses are ignored and no session is opened, so no credits are used. */
     paused: boolean;
+    /** Toggle talk: press once to start talking, again to stop (for one-shot remotes and headset buttons). */
+    talkToggle: boolean;
+    /** Extra KeyboardEvent.code values that act as the talk key, comma separated (Space always works). */
+    talkKeys: string;
     turnMode: TurnMode;
     /** Transport: auto tries WebRTC and falls back to WebSocket if it drops within seconds. */
     connection: Connection;
@@ -97,6 +101,8 @@ export const defaultConfig = (): Config => ({
     provider: 'micloop',
     agentId: '',
     paused: false,
+    talkToggle: false,
+    talkKeys: 'Enter,MediaPlayPause,AudioVolumeUp,F13',
     turnMode: 'pushToTalk',
     connection: 'auto',
     sessionIdleTimeoutSec: 45,

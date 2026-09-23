@@ -51,6 +51,7 @@ The mic needs a secure context, which both `localhost` and Vercel's HTTPS satisf
 | Key | Action |
 | --- | --- |
 | Space (hold), right mouse button (hold), finger on screen (hold, show mode), or the HOLD TO TALK button (edit mode / control tab) | Push to talk |
+| Enter, MediaPlayPause, AudioVolumeUp, F13 | Also talk keys by default (editable in the Agent folder as "extra talk keys"), so a Bluetooth shutter remote or a headset button can drive it. Tick "talk = toggle" for one-shot buttons: press to start, press again to stop. |
 | P | Pause / resume the agent. Paused, talk presses are ignored and any open session ends at once, so no credits are used while you map or rehearse. The face keeps its idle animation. |
 | E | Toggle edit mode (panel, HUD, log, cursor) |
 | T | Toggle test pattern (grid, crosshair, circle, orientation marks) |
