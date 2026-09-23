@@ -147,7 +147,7 @@ export class SessionManager {
         });
         break;
       case 'muse':
-        agent = new MuseAgent({ relayUrl: c.relayUrl, pushToTalk: c.turnMode === 'pushToTalk' });
+        agent = new MuseAgent({ relayUrl: c.relayUrl, relayToken: c.relayToken, pushToTalk: c.turnMode === 'pushToTalk' });
         break;
       case 'echo':
         agent = new EchoAgent();
@@ -160,11 +160,11 @@ export class SessionManager {
     });
     agent.onError((e) => {
       this.log('err', e.message);
-      if (/quota_exceeded|run out of credits|max_duration_exceeded|unauthorized|\b401\b|\b403\b/i.test(e.message)) {
+      if (/quota_exceeded|run out of credits|max_duration_exceeded|unauthorized|relay token|\b401\b|\b403\b/i.test(e.message)) {
         // Terminal from the server's side; retrying only repeats the message. The next press tries again.
         this.wantConnected = false;
         window.clearTimeout(this.retryTimer);
-        this.log('err', 'not retrying: fix this on the ElevenLabs side (credits, plan or agent security), then press talk again');
+        this.log('err', 'not retrying: fix this on the provider side (credits, plan, agent security or relay token), then press talk again');
       }
     });
     agent.onTranscript((l: TranscriptLine) => this.log(l.role, l.text));

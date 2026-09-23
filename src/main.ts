@@ -39,6 +39,7 @@ const store = new ConfigStore();
   if (params.has('muse')) {
     store.cfg.agent.provider = 'muse';
     if (params.get('relay')) store.cfg.agent.relayUrl = params.get('relay')!;
+    if (params.get('token')) store.cfg.agent.relayToken = params.get('token')!;
     store.touch();
   }
   // ?ws forces the WebSocket transport, ?rtc forces WebRTC (otherwise auto).

@@ -23,6 +23,7 @@
  *      ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID, ELEVENLABS_TTS_MODEL, TTS_URL, PERSONA, PORT, MOCK.
  */
 import { WebSocketServer, WebSocket } from 'ws';
+import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -31,6 +32,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const env = (k, d = '') => process.env[k] ?? d;
 const MOCK = env('MOCK') === '1' || process.argv.includes('--mock');
 const PORT = Number(env('PORT', '8787'));
+// Hosting platforms set PORT and expect 0.0.0.0; local runs stay on loopback unless HOST is given.
+const HOST = env('HOST', process.env.PORT ? '0.0.0.0' : '127.0.0.1');
+/** Shared secret the browser must present in its hello. Required whenever the relay is reachable beyond localhost. */
+const RELAY_TOKEN = env('RELAY_TOKEN');
 const META_KEY = env('META_API_KEY') || env('MODEL_API_KEY');
 const META_BASE = env('META_API_BASE', 'https://api.meta.ai/v1');
 const ASR_URL = env('META_ASR_URL', 'wss://api.meta.ai/v1/asr/realtime');
@@ -43,6 +48,10 @@ const MAX_HISTORY = 12;
 
 if (!MOCK && !META_KEY) {
   console.error('Set META_API_KEY (from dev.meta.ai) or run with --mock');
+  process.exit(1);
+}
+if (HOST !== '127.0.0.1' && !RELAY_TOKEN && !MOCK) {
+  console.error('Relay is listening beyond localhost: set RELAY_TOKEN so strangers cannot spend your credits');
   process.exit(1);
 }
 
@@ -267,6 +276,7 @@ class Session {
     this.asr = null;
     this.reply = null; // AbortController for the reply in flight
     this.speaking = false;
+    this.authed = !RELAY_TOKEN;
   }
   send(obj) {
     if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
@@ -281,7 +291,7 @@ class Session {
 
   async onMessage(data, isBinary) {
     if (isBinary) {
-      this.asr?.send(data);
+      if (this.authed) this.asr?.send(data);
       return;
     }
     let m;
@@ -291,8 +301,15 @@ class Session {
       return;
     }
     dbg('<-', m.type, m.on ?? '', m.turnMode ?? '');
+    if (!this.authed && m.type !== 'hello') return;
     switch (m.type) {
       case 'hello':
+        if (RELAY_TOKEN && m.token !== RELAY_TOKEN) {
+          this.send({ type: 'error', message: 'relay token missing or wrong (set it in the Agent folder or ?token=)' });
+          this.ws.close(4001, 'unauthorized');
+          return;
+        }
+        this.authed = true;
         this.turnMode = m.turnMode === 'openMic' ? 'openMic' : 'pushToTalk';
         this.history = [];
         if (this.turnMode === 'openMic') await this.openMicStream();
@@ -409,7 +426,17 @@ class Session {
 }
 
 // ---------------------------------------------------------------- server
-const wss = new WebSocketServer({ port: PORT, host: env('HOST', '127.0.0.1') });
+// Plain HTTP answers health checks (hosting platforms poll GET /); WebSocket upgrades carry the faces.
+const http = createServer((req, res) => {
+  if (req.method === 'GET' && (req.url === '/' || req.url === '/healthz')) {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end(`talking-head relay ok (${MOCK ? 'mock' : 'live'})\n`);
+    return;
+  }
+  res.writeHead(404);
+  res.end();
+});
+const wss = new WebSocketServer({ server: http });
 wss.on('connection', (ws, req) => {
   const s = new Session(ws);
   log('face connected from', req.socket.remoteAddress);
@@ -419,4 +446,6 @@ wss.on('connection', (ws, req) => {
     log('face disconnected');
   });
 });
-log(`relay on ws://${env('HOST', '127.0.0.1')}:${PORT}  mode=${MOCK ? 'MOCK' : 'live'}  llm=${LLM_MODEL}  asr=${ASR_MODEL}  tts=${TTS}`);
+http.listen(PORT, HOST, () => {
+  log(`relay on ws://${HOST}:${PORT}  mode=${MOCK ? 'MOCK' : 'live'}  llm=${LLM_MODEL}  asr=${ASR_MODEL}  tts=${TTS}  auth=${RELAY_TOKEN ? 'token' : 'none'}`);
+});

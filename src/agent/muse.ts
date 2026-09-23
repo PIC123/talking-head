@@ -4,6 +4,7 @@ import { levelFromFrequencyData } from '../audio/analyzer';
 export interface MuseOptions {
   /** WebSocket URL of the relay (server/relay.mjs). */
   relayUrl: string;
+  relayToken: string;
   pushToTalk: boolean;
 }
 
@@ -62,12 +63,13 @@ export class MuseAgent extends BaseAgent {
       const ws = new WebSocket(this.opts.relayUrl);
       ws.binaryType = 'arraybuffer';
       ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'hello', turnMode: this.opts.pushToTalk ? 'pushToTalk' : 'openMic' }));
+        ws.send(JSON.stringify({ type: 'hello', turnMode: this.opts.pushToTalk ? 'pushToTalk' : 'openMic', token: this.opts.relayToken || undefined }));
         this.ws = ws;
         resolve();
       };
       ws.onerror = () => reject(new Error(`relay not reachable at ${this.opts.relayUrl} (start it with: npm run relay)`));
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
+        if (ev.code === 4001) this.emitError(new Error('relay refused the connection: unauthorized (check relayToken)'));
         if (this.ws === ws) {
           this.ws = null;
           this.stopPlayback();

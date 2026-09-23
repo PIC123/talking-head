@@ -9,6 +9,8 @@ export interface Config {
     agentId: string;
     /** Relay WebSocket URL for the Meta Muse provider (server/relay.mjs). */
     relayUrl: string;
+    /** Shared secret the relay requires when hosted beyond localhost. */
+    relayToken: string;
     /** Paused: talk presses are ignored and no session is opened, so no credits are used. */
     paused: boolean;
     /** Toggle talk: press once to start talking, again to stop (for one-shot remotes and headset buttons). */
@@ -103,6 +105,7 @@ export const defaultConfig = (): Config => ({
     provider: 'micloop',
     agentId: '',
     relayUrl: 'ws://127.0.0.1:8787',
+    relayToken: '',
     paused: false,
     talkToggle: false,
     talkKeys: 'Enter,MediaPlayPause,AudioVolumeUp,F13',

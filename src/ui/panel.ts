@@ -22,6 +22,7 @@ export function createPanel(store: ConfigStore, hooks: PanelHooks): Pane {
   agent.addBinding(c.agent, 'paused', { label: 'paused (P)' }).on('change', touch);
   agent.addBinding(c.agent, 'agentId').on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'relayUrl').on('change', () => { touch(); hooks.onAgentChanged(); });
+  agent.addBinding(c.agent, 'relayToken').on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'turnMode', { options: { 'Push to talk': 'pushToTalk', 'Open mic': 'openMic' } })
     .on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'connection', { options: { 'Auto (WebRTC, then WebSocket)': 'auto', 'WebRTC': 'webrtc', 'WebSocket': 'websocket' } })

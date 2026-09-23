@@ -9,7 +9,8 @@
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
     "relay": "node --env-file-if-exists=.env server/relay.mjs",
-    "relay:mock": "node server/relay.mjs --mock"
+    "relay:mock": "node server/relay.mjs --mock",
+    "start": "node server/relay.mjs"
   },
   "devDependencies": {
     "@tweakpane/core": "^2.0.5",
@@ -22,5 +23,8 @@
     "@elevenlabs/client": "^1.25.0",
     "tweakpane": "^4.0.5",
     "ws": "^8.21.3"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

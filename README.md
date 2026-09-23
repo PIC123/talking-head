@@ -59,9 +59,31 @@ Then open the app with `?muse` (or set provider to "Meta Muse (relay)" in the pa
 
 - **No key yet?** `npm run relay:mock` runs the same pipeline with a fake brain that hands your own voice back, so the browser side, states and mouth can be tested offline.
 - **Voice.** Meta has no text-to-speech on the API yet. `TTS_PROVIDER=elevenlabs` uses ElevenLabs' plain TTS (your existing account), `custom` POSTs `{text, sampleRate}` to `TTS_URL` and expects raw PCM16 mono 24 kHz back (the slot for an internal Meta voice), `none` keeps the head silent but thinking.
-- **Phone or another machine.** Run the relay with `HOST=0.0.0.0` and open the app with `?muse&relay=ws://<laptop-ip>:8787`. Browsers require `wss://` from an `https://` page, so from the Vercel URL you need a TLS proxy in front of the relay; from `npm run dev` on the laptop, plain `ws://` is fine.
+- **Hosting the relay** so a phone, a Pi or any browser can use it with nothing running on your laptop: see below.
 - **Persona and memory.** The relay sends `config/persona.md` as the system prompt and keeps the last 12 turns per connection. A shared event-long story is a few lines here: keep a running summary and prepend it.
 - **Debugging.** `DEBUG=1 npm run relay` logs every message; the app's `?debug` page checks that the relay answers.
+
+### Hosting the relay
+
+The relay is a single Node process with almost no CPU or memory needs, so the smallest tier of any host with WebSocket support works. It ships with a `Dockerfile`, a `fly.toml` and a `start` script.
+
+**Fly.io** (about $2 a month, scales to zero when idle):
+
+```bash
+fly launch --no-deploy            # accepts fly.toml; pick a name and region
+fly secrets set META_API_KEY=... ELEVENLABS_API_KEY=... ELEVENLABS_VOICE_ID=... RELAY_TOKEN=$(openssl rand -hex 16)
+fly deploy
+```
+
+**Railway or Render:** connect the repo, start command `npm start`, add the same variables. Render's free tier sleeps after 15 minutes and takes 30 s to wake on the first press; the paid tier stays warm.
+
+Then open the app with the hosted address and token, once; both are saved in the browser:
+
+```
+https://talking-head-kappa-ten.vercel.app/?muse&relay=wss://talking-head-relay.fly.dev&token=YOUR_TOKEN
+```
+
+`RELAY_TOKEN` is required whenever the relay listens beyond localhost. Without it anyone who finds the address could spend your credits. The token travels inside the first WebSocket message, never in a URL that gets logged, except the one-time `?token=` you type yourself. Mic access needs `https://` on the page and `wss://` to the relay, which Vercel and the hosts above give you for free.
 
 ## Keyboard map
 
