@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/turn.js": {
+      "maxDuration": 60,
+      "supportsCancellation": true,
+      "includeFiles": "config/persona.md"
+    }
+  }
+}

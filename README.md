@@ -59,31 +59,39 @@ Then open the app with `?muse` (or set provider to "Meta Muse (relay)" in the pa
 
 - **No key yet?** `npm run relay:mock` runs the same pipeline with a fake brain that hands your own voice back, so the browser side, states and mouth can be tested offline.
 - **Voice.** Meta has no text-to-speech on the API yet. `TTS_PROVIDER=elevenlabs` uses ElevenLabs' plain TTS (your existing account), `custom` POSTs `{text, sampleRate}` to `TTS_URL` and expects raw PCM16 mono 24 kHz back (the slot for an internal Meta voice), `none` keeps the head silent but thinking.
-- **Hosting the relay** so a phone, a Pi or any browser can use it with nothing running on your laptop: see below.
+- **Hosting** so a phone, a Pi or any browser can use it with nothing on your laptop: serverless on Vercel for push-to-talk, or a small container for open mic. See below.
 - **Persona and memory.** The relay sends `config/persona.md` as the system prompt and keeps the last 12 turns per connection. A shared event-long story is a few lines here: keep a running summary and prepend it.
 - **Debugging.** `DEBUG=1 npm run relay` logs every message; the app's `?debug` page checks that the relay answers.
 
-### Hosting the relay
+### Hosting: serverless on Vercel (push-to-talk)
 
-The relay is a single Node process with almost no CPU or memory needs, so the smallest tier of any host with WebSocket support works. It ships with a `Dockerfile`, a `fly.toml` and a `start` script.
+For push-to-talk, each turn is one HTTP request: the utterance goes up, the reply streams back. That runs as a Vercel Function in this repo (`api/turn.js`) next to the page, so nothing runs on your laptop and no extra service is needed. In the Vercel project settings add these environment variables, then deploy:
 
-**Fly.io** (about $2 a month, scales to zero when idle):
+| Variable | Value |
+| --- | --- |
+| `META_API_KEY` | from dev.meta.ai |
+| `RELAY_TOKEN` | any long random string, e.g. `openssl rand -hex 16` |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | the voice (or `TTS_PROVIDER=custom` + `TTS_URL`) |
 
-```bash
-fly launch --no-deploy            # accepts fly.toml; pick a name and region
-fly secrets set META_API_KEY=... ELEVENLABS_API_KEY=... ELEVENLABS_VOICE_ID=... RELAY_TOKEN=$(openssl rand -hex 16)
-fly deploy
-```
-
-**Railway or Render:** connect the repo, start command `npm start`, add the same variables. Render's free tier sleeps after 15 minutes and takes 30 s to wake on the first press; the paid tier stays warm.
-
-Then open the app with the hosted address and token, once; both are saved in the browser:
+Open the page once with the token and it is remembered in that browser:
 
 ```
-https://talking-head-kappa-ten.vercel.app/?muse&relay=wss://talking-head-relay.fly.dev&token=YOUR_TOKEN
+https://talking-head-kappa-ten.vercel.app/?muse&token=YOUR_TOKEN
 ```
 
-`RELAY_TOKEN` is required whenever the relay listens beyond localhost. Without it anyone who finds the address could spend your credits. The token travels inside the first WebSocket message, never in a URL that gets logged, except the one-time `?token=` you type yourself. Mic access needs `https://` on the page and `wss://` to the relay, which Vercel and the hosts above give you for free.
+On a hosted page `?muse` defaults the endpoint to the page's own `/api/turn`. Limits on the Hobby plan: 300 s per function call (the app asks for 60), 4.5 MB per request, which caps an utterance at 60 s. The endpoint refuses to run without `RELAY_TOKEN`, since it is public by nature. `vercel.json` enables request cancellation so a barge-in also stops the upstream calls.
+
+Latency is a little higher than the WebSocket relay because transcription starts after you release the button rather than during: expect about a second and a half to first sound.
+
+### Hosting: the WebSocket relay (open mic)
+
+Open-mic mode needs streaming speech-to-text with the model's own endpointing, which needs a long-lived process. Vercel, Azure Functions and Supabase Edge Functions do not fit that; a small container does. The relay ships with a `Dockerfile`, a `fly.toml` and `npm start`, and also serves `POST /turn` for push-to-talk clients.
+
+- **Azure Container Apps** (already in your account): create a container app from the Dockerfile, set min replicas 0 and the env vars below, and use its `https://` hostname as `wss://...` in the app.
+- **Fly.io**: `fly launch --no-deploy`, `fly secrets set META_API_KEY=... ELEVENLABS_API_KEY=... ELEVENLABS_VOICE_ID=... RELAY_TOKEN=...`, `fly deploy`. About $2 a month, scales to zero.
+- **Railway or Render**: connect the repo, start command `npm start`, same variables.
+
+Then open the app with `?muse&relay=wss://<host>&token=YOUR_TOKEN`. `RELAY_TOKEN` is required whenever the relay listens beyond localhost, and mic access needs `https://` on the page with `wss://` to the relay, which all of these provide.
 
 ## Keyboard map
 
@@ -181,7 +189,9 @@ google-chrome --kiosk --autoplay-policy=no-user-gesture-required \
 | Module | Responsibility |
 | --- | --- |
 | `src/agent/` | `VoiceAgent` interface, ElevenLabs adapter, `MuseAgent` (talks to the relay), `MicLoopAgent` and `EchoAgent` test adapters, `SessionManager` (connect on demand, idle timeout, reconnect). |
-| `server/relay.mjs` | Node relay for the Meta Muse provider: Voice Transcribe over WebSocket, Muse Spark streaming, sentence-chunked text-to-speech, mock mode. |
+| `server/pipeline.mjs` | The Meta Muse pipeline: one-shot Voice Transcribe, Muse Spark streaming, sentence-chunked text-to-speech, the framed HTTP turn handler, mock mode. |
+| `server/relay.mjs` | Long-lived relay: WebSocket sessions with streaming Voice Transcribe (open mic, barge-in) plus `POST /turn`. |
+| `api/turn.js` | Vercel Function wrapping the HTTP turn handler. |
 | `src/audio/analyzer.ts` | Frequency data to loudness + brightness. |
 | `src/behavior/` | Mouth envelope follower; behavior engine turning state + level into `FaceParams` (blinks, saccades, brows, glow). |
 | `src/face/` | Draws `FaceParams` to a 1024×1024 canvas; test pattern. |

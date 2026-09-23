@@ -35,10 +35,13 @@ const store = new ConfigStore();
     store.cfg.agent.provider = 'elevenlabs';
     store.touch();
   }
-  // ?muse switches to the Meta Muse relay provider (optionally ?relay=ws://host:port).
+  // ?muse switches to the Meta Muse provider. ?relay= picks the endpoint: ws(s):// for the relay
+  // server, http(s):// or /api/turn for the serverless turn endpoint. On a hosted page with no
+  // relay given, the page's own /api/turn is assumed.
   if (params.has('muse')) {
     store.cfg.agent.provider = 'muse';
     if (params.get('relay')) store.cfg.agent.relayUrl = params.get('relay')!;
+    else if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /^wss?:\/\/(127\.0\.0\.1|localhost)/.test(store.cfg.agent.relayUrl)) store.cfg.agent.relayUrl = '/api/turn';
     if (params.get('token')) store.cfg.agent.relayToken = params.get('token')!;
     store.touch();
   }

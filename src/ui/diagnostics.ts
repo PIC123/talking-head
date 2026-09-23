@@ -34,6 +34,18 @@ export async function runDiagnostics(cfg: Config, log: Logger): Promise<void> {
   // Agent
   const a = cfg.agent;
   log('info', `agent config: provider=${a.provider} turn=${a.turnMode} connection=${a.connection} id=${a.agentId ? a.agentId.slice(0, 12) + '…' : '(EMPTY)'}`);
+  if (a.provider === 'muse' && (/^https?:/i.test(a.relayUrl) || a.relayUrl.startsWith('/'))) {
+    const url = a.relayUrl.startsWith('/') ? location.origin + a.relayUrl : a.relayUrl;
+    try {
+      const r = await fetch(url);
+      const t = (await r.text()).slice(0, 120);
+      if (r.ok) log('info', `turn endpoint OK at ${url}`);
+      else log('err', `turn endpoint ${url} answered HTTP ${r.status}: ${t}`);
+    } catch (e) {
+      log('err', `turn endpoint not reachable at ${url}: ${String(e)}`);
+    }
+    return;
+  }
   if (a.provider === 'muse') {
     await new Promise<void>((resolve) => {
       const ws = new WebSocket(a.relayUrl);
