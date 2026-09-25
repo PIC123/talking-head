@@ -27,6 +27,10 @@ export const TTS = env('TTS_PROVIDER', env('ELEVENLABS_API_KEY') ? 'elevenlabs' 
 export const RELAY_TOKEN = env('RELAY_TOKEN');
 export const SAMPLE_RATE = 24000;
 export const MAX_HISTORY = 12;
+/** Muse Spark reasons before it answers and those tokens count against the output cap, so keep the cap generous
+ *  and the effort low: a spoken two-sentence reply does not need deliberation. minimal | low | medium | high | xhigh. */
+export const REASONING_EFFORT = env('MUSE_REASONING_EFFORT', 'minimal');
+export const MAX_COMPLETION_TOKENS = Number(env('MUSE_MAX_COMPLETION_TOKENS', '1500'));
 /** Longest utterance accepted per turn (Vercel caps request bodies at 4.5 MB; 60 s of PCM is 2.9 MB). */
 export const MAX_UTTERANCE_SEC = 60;
 
@@ -99,14 +103,25 @@ export async function* streamReply(history, signal) {
   const res = await fetch(`${META_BASE}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${META_KEY}` },
-    body: JSON.stringify({ model: LLM_MODEL, stream: true, max_tokens: 200, messages: [{ role: 'system', content: PERSONA }, ...history] }),
+    body: JSON.stringify({
+      model: LLM_MODEL,
+      stream: true,
+      max_completion_tokens: MAX_COMPLETION_TOKENS,
+      reasoning_effort: REASONING_EFFORT,
+      stream_options: { include_usage: true },
+      messages: [{ role: 'system', content: PERSONA }, ...history],
+    }),
     signal,
   });
   if (!res.ok || !res.body) throw new Error(`Muse Spark HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
-  while (true) {
+  let emitted = 0;
+  let finish = '';
+  let usage = null;
+  let sawDone = false;
+  while (!sawDone) {
     const { value, done } = await reader.read();
     if (done) break;
     buf += dec.decode(value, { stream: true });
@@ -116,14 +131,33 @@ export async function* streamReply(history, signal) {
       buf = buf.slice(i + 1);
       if (!line.startsWith('data:')) continue;
       const payload = line.slice(5).trim();
-      if (payload === '[DONE]') return;
+      if (payload === '[DONE]') {
+        sawDone = true;
+        break;
+      }
+      let chunk;
       try {
-        const delta = JSON.parse(payload).choices?.[0]?.delta?.content;
-        if (delta) yield delta;
+        chunk = JSON.parse(payload);
       } catch {
-        /* keepalive */
+        continue; /* keepalive */
+      }
+      const choice = chunk.choices?.[0];
+      if (choice?.finish_reason) finish = choice.finish_reason;
+      if (chunk.usage) usage = chunk.usage;
+      // Reasoning arrives as delta.reasoning_content; only spoken text is delta.content.
+      const delta = choice?.delta?.content;
+      if (typeof delta === 'string' && delta) {
+        emitted += delta.length;
+        yield delta;
+      } else if (Array.isArray(delta)) {
+        for (const part of delta) if (part?.type === 'text' && part.text) { emitted += part.text.length; yield part.text; }
       }
     }
+  }
+  if (usage) log('muse spark usage', JSON.stringify(usage));
+  if (!emitted) {
+    const r = usage?.completion_tokens_details?.reasoning_tokens;
+    throw new Error(`Muse Spark returned no text (finish_reason=${finish || 'none'}${r !== undefined ? `, reasoning_tokens=${r}` : ''}). Raise MUSE_MAX_COMPLETION_TOKENS or lower MUSE_REASONING_EFFORT.`);
   }
 }
 
