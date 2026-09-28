@@ -11,6 +11,8 @@ export interface Config {
     relayUrl: string;
     /** Shared secret the relay requires when hosted beyond localhost. */
     relayToken: string;
+    /** Microphone deviceId ('' = browser default). Chosen in the panel; per browser. */
+    micDeviceId: string;
     /** Paused: talk presses are ignored and no session is opened, so no credits are used. */
     paused: boolean;
     /** Toggle talk: press once to start talking, again to stop (for one-shot remotes and headset buttons). */
@@ -106,6 +108,7 @@ export const defaultConfig = (): Config => ({
     agentId: '',
     relayUrl: 'ws://127.0.0.1:8787',
     relayToken: '',
+    micDeviceId: '',
     paused: false,
     talkToggle: false,
     talkKeys: 'Enter,MediaPlayPause,AudioVolumeUp,F13',

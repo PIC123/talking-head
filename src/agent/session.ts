@@ -144,16 +144,17 @@ export class SessionManager {
           promptOverride: this.personaPrompt,
           connectionType: c.connection === 'auto' ? (this.wsFallback ? 'websocket' : 'webrtc') : c.connection,
           log: (t) => this.log('info', t),
+          micDeviceId: c.micDeviceId,
         });
         break;
       case 'muse':
-        agent = new MuseAgent({ relayUrl: c.relayUrl, relayToken: c.relayToken, pushToTalk: c.turnMode === 'pushToTalk' });
+        agent = new MuseAgent({ relayUrl: c.relayUrl, relayToken: c.relayToken, pushToTalk: c.turnMode === 'pushToTalk', micDeviceId: c.micDeviceId });
         break;
       case 'echo':
-        agent = new EchoAgent();
+        agent = new EchoAgent(c.micDeviceId);
         break;
       default:
-        agent = new MicLoopAgent();
+        agent = new MicLoopAgent(c.micDeviceId);
     }
     agent.onState((s) => {
       if (this.agent === agent) this.handleState(s);

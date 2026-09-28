@@ -1,4 +1,5 @@
 import type { Config } from '../config/schema';
+import { openMic } from '../audio/analyzer';
 import type { Logger } from '../agent/session';
 
 const TOKEN_URL = 'https://api.elevenlabs.io/v1/convai/conversation/token';
@@ -22,10 +23,12 @@ export async function runDiagnostics(cfg: Config, log: Logger): Promise<void> {
     /* Safari has no permissions.query for the mic */
   }
   try {
-    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const s = await openMic(cfg.agent.micDeviceId);
     const label = s.getAudioTracks()[0]?.label || '(no label)';
     s.getTracks().forEach((t) => t.stop());
-    log('info', `mic OK: ${label}`);
+    log('info', `mic OK: ${label}${/steam|virtual|cable|voicemeeter|loopback/i.test(label) ? '  <- this looks like a virtual device; pick a real microphone in the Agent folder' : ''}`);
+    const inputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput' && d.label);
+    if (inputs.length > 1) log('info', `other inputs: ${inputs.map((d) => d.label).filter((l) => l !== label).join(' | ')}`);
   } catch (e) {
     const err = e as DOMException;
     log('err', `mic FAILED: ${err.name}: ${err.message}. ${micHint(err.name)}`);

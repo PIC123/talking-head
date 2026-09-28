@@ -93,6 +93,10 @@ Open-mic mode needs streaming speech-to-text with the model's own endpointing, w
 
 Then open the app with `?muse&relay=wss://<host>&token=YOUR_TOKEN`. `RELAY_TOKEN` is required whenever the relay listens beyond localhost, and mic access needs `https://` on the page with `wss://` to the relay, which all of these provide.
 
+## Choosing the microphone
+
+The Agent folder has a **microphone** list (labels appear after the mic permission is granted, so open the panel after Start). It matters on machines with virtual inputs such as Steam Streaming Microphone, VoiceMeeter or a virtual cable, which the browser may pick by default and which deliver silence. The `?debug` page names the device in use and flags virtual-looking ones, and the Muse provider logs when a turn's audio was silent.
+
 ## Keyboard map
 
 | Key | Action |

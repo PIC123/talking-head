@@ -1,11 +1,12 @@
 import { BaseAgent, type AgentAudioLevel } from './types';
-import { levelFromFrequencyData } from '../audio/analyzer';
+import { levelFromFrequencyData, openMic, peakLevel } from '../audio/analyzer';
 
 export interface MuseOptions {
   /** WebSocket URL of the relay (server/relay.mjs). */
   relayUrl: string;
   relayToken: string;
   pushToTalk: boolean;
+  micDeviceId: string;
 }
 
 const SAMPLE_RATE = 24000;
@@ -58,7 +59,8 @@ export class MuseAgent extends BaseAgent {
       this.analyser.fftSize = 256;
       this.analyser.smoothingTimeConstant = 0.4;
       this.analyser.connect(this.ctx.destination);
-      this.mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+      this.mic = await openMic(this.opts.micDeviceId, { channelCount: 1, echoCancellation: true, noiseSuppression: true });
+      this.emitTranscript('agent', `(mic: ${this.mic.getAudioTracks()[0]?.label || 'unknown device'})`);
       await this.startCapture();
       if (this.http) {
         if (!this.opts.pushToTalk) this.emitError(new Error('open mic needs the WebSocket relay; the HTTP endpoint is push-to-talk only'));
@@ -296,6 +298,12 @@ export class MuseAgent extends BaseAgent {
       this.setState('idle');
       return;
     }
+    const peak = peakLevel(chunks);
+    if (peak < 0.005) {
+      this.emitError(new Error(`microphone delivered silence for ${(total / SAMPLE_RATE).toFixed(1)} s (peak ${peak.toFixed(3)}). Pick another input in the Agent folder's "microphone" list.`));
+      this.setState('idle');
+      return;
+    }
     const pcm = new Int16Array(total);
     let k = 0;
     for (const c of chunks) {
@@ -345,6 +353,9 @@ export class MuseAgent extends BaseAgent {
             if (m.type === 'transcript' && m.role === 'user' && m.text) userText = m.text;
             if (m.type === 'state' && m.state === 'idle' && m.assistantText !== undefined) assistantText = m.assistantText;
             this.onMessage(JSON.stringify(m));
+            if (m.type === 'state' && m.state === 'idle' && !userText) {
+              this.emitTranscript('agent', `(no speech recognized in ${(total / SAMPLE_RATE).toFixed(1)} s of audio, peak level ${peak.toFixed(2)})`);
+            }
           }
         }
       }

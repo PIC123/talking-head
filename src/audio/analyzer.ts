@@ -58,3 +58,24 @@ export function getAudioContext(): AudioContext {
   if (!sharedCtx) sharedCtx = new AudioContext();
   return sharedCtx;
 }
+
+/** getUserMedia audio constraints honouring the chosen device; falls back to the default if that device is gone. */
+export async function openMic(deviceId: string, extra: MediaTrackConstraints = {}): Promise<MediaStream> {
+  const base: MediaTrackConstraints = { ...extra };
+  if (deviceId) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: { ...base, deviceId: { exact: deviceId } } });
+    } catch (e) {
+      if ((e as DOMException).name !== 'OverconstrainedError' && (e as DOMException).name !== 'NotFoundError') throw e;
+      console.warn('chosen microphone not found, using default');
+    }
+  }
+  return navigator.mediaDevices.getUserMedia({ audio: base });
+}
+
+/** Peak absolute sample in a PCM16 buffer, 0..1. */
+export function peakLevel(chunks: Int16Array[]): number {
+  let peak = 0;
+  for (const c of chunks) for (let i = 0; i < c.length; i += 4) peak = Math.max(peak, Math.abs(c[i]));
+  return peak / 32768;
+}
