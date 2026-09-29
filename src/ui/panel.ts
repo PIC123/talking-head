@@ -17,10 +17,22 @@ export function createPanel(store: ConfigStore, hooks: PanelHooks): Pane {
   const touch = () => store.touch();
 
   const agent = pane.addFolder({ title: 'Agent', expanded: true });
-  agent.addBinding(c.agent, 'provider', { options: { 'ElevenLabs': 'elevenlabs', 'Mic loop (test)': 'micloop', 'Echo (test)': 'echo' } })
+  agent.addBinding(c.agent, 'provider', { options: { 'ElevenLabs': 'elevenlabs', 'Meta Muse (relay)': 'muse', 'Mic loop (test)': 'micloop', 'Echo (test)': 'echo' } })
     .on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'paused', { label: 'paused (P)' }).on('change', touch);
+  // Microphone list: labels only appear once the mic permission has been granted (after Start).
+  const micOptions: Record<string, string> = { 'Browser default': '' };
+  const micBinding = agent.addBinding(c.agent, 'micDeviceId', { label: 'microphone', options: micOptions })
+    .on('change', () => { touch(); hooks.onAgentChanged(); });
+  void navigator.mediaDevices?.enumerateDevices().then((devs) => {
+    for (const d of devs) if (d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default') micOptions[d.label || `mic ${d.deviceId.slice(0, 6)}`] = d.deviceId;
+    if (c.agent.micDeviceId && !Object.values(micOptions).includes(c.agent.micDeviceId)) micOptions['(saved device, not present)'] = c.agent.micDeviceId;
+    (micBinding as unknown as { options: unknown }).options = Object.entries(micOptions).map(([text, value]) => ({ text, value }));
+    micBinding.refresh();
+  }).catch(() => {});
   agent.addBinding(c.agent, 'agentId').on('change', () => { touch(); hooks.onAgentChanged(); });
+  agent.addBinding(c.agent, 'relayUrl').on('change', () => { touch(); hooks.onAgentChanged(); });
+  agent.addBinding(c.agent, 'relayToken').on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'turnMode', { options: { 'Push to talk': 'pushToTalk', 'Open mic': 'openMic' } })
     .on('change', () => { touch(); hooks.onAgentChanged(); });
   agent.addBinding(c.agent, 'connection', { options: { 'Auto (WebRTC, then WebSocket)': 'auto', 'WebRTC': 'webrtc', 'WebSocket': 'websocket' } })

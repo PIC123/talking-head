@@ -1,4 +1,5 @@
 import type { Config } from '../config/schema';
+import { openMic } from '../audio/analyzer';
 import type { Logger } from '../agent/session';
 
 const TOKEN_URL = 'https://api.elevenlabs.io/v1/convai/conversation/token';
@@ -22,10 +23,12 @@ export async function runDiagnostics(cfg: Config, log: Logger): Promise<void> {
     /* Safari has no permissions.query for the mic */
   }
   try {
-    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const s = await openMic(cfg.agent.micDeviceId);
     const label = s.getAudioTracks()[0]?.label || '(no label)';
     s.getTracks().forEach((t) => t.stop());
-    log('info', `mic OK: ${label}`);
+    log('info', `mic OK: ${label}${/steam|virtual|cable|voicemeeter|loopback/i.test(label) ? '  <- this looks like a virtual device; pick a real microphone in the Agent folder' : ''}`);
+    const inputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput' && d.label);
+    if (inputs.length > 1) log('info', `other inputs: ${inputs.map((d) => d.label).filter((l) => l !== label).join(' | ')}`);
   } catch (e) {
     const err = e as DOMException;
     log('err', `mic FAILED: ${err.name}: ${err.message}. ${micHint(err.name)}`);
@@ -34,6 +37,27 @@ export async function runDiagnostics(cfg: Config, log: Logger): Promise<void> {
   // Agent
   const a = cfg.agent;
   log('info', `agent config: provider=${a.provider} turn=${a.turnMode} connection=${a.connection} id=${a.agentId ? a.agentId.slice(0, 12) + '…' : '(EMPTY)'}`);
+  if (a.provider === 'muse' && (/^https?:/i.test(a.relayUrl) || a.relayUrl.startsWith('/'))) {
+    const url = a.relayUrl.startsWith('/') ? location.origin + a.relayUrl : a.relayUrl;
+    try {
+      const r = await fetch(url);
+      const t = (await r.text()).slice(0, 120);
+      if (r.ok) log('info', `turn endpoint OK at ${url}`);
+      else log('err', `turn endpoint ${url} answered HTTP ${r.status}: ${t}`);
+    } catch (e) {
+      log('err', `turn endpoint not reachable at ${url}: ${String(e)}`);
+    }
+    return;
+  }
+  if (a.provider === 'muse') {
+    await new Promise<void>((resolve) => {
+      const ws = new WebSocket(a.relayUrl);
+      const t = setTimeout(() => { ws.close(); log('err', `relay at ${a.relayUrl} did not answer in 3 s. Start it with: npm run relay (or npm run relay:mock)`); resolve(); }, 3000);
+      ws.onopen = () => { clearTimeout(t); log('info', `relay OK at ${a.relayUrl}`); ws.close(); resolve(); };
+      ws.onerror = () => { clearTimeout(t); log('err', `relay not reachable at ${a.relayUrl}. Start it with: npm run relay (or npm run relay:mock). From a phone, use the laptop's LAN address and HOST=0.0.0.0.`); resolve(); };
+    });
+    return;
+  }
   if (a.provider !== 'elevenlabs') {
     log('info', 'provider is not ElevenLabs; token check skipped');
     return;

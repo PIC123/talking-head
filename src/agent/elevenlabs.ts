@@ -23,6 +23,7 @@ export interface ElevenLabsOptions {
   promptOverride?: string;
   connectionType: 'webrtc' | 'websocket';
   log?: (text: string) => void;
+  micDeviceId?: string;
 }
 
 /**
@@ -53,6 +54,7 @@ export class ElevenLabsAgent extends BaseAgent {
       const conv = await VoiceConversation.startSession({
         agentId: this.opts.agentId,
         connectionType: this.opts.connectionType,
+        inputDeviceId: this.opts.micDeviceId || undefined,
         onConnect: ({ conversationId }) =>
           this.opts.log?.(`connected over ${this.opts.connectionType}, conversation ${conversationId}`),
         overrides: this.opts.promptOverride ? { agent: { prompt: { prompt: this.opts.promptOverride } } } : undefined,

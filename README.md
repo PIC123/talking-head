@@ -46,6 +46,57 @@ npm run build && npm run preview   # http://localhost:4173
 
 The mic needs a secure context, which both `localhost` and Vercel's HTTPS satisfy. A LAN IP over plain HTTP will not get mic access.
 
+## Meta Muse provider (relay)
+
+An alternative to ElevenLabs that runs on Meta Model API: Muse Voice Transcribe for ears, Muse Spark for the brain, and a pluggable voice. It needs a small relay process next to the browser, because the API key must not live in the page and Vercel cannot host WebSockets.
+
+```bash
+cp .env.example .env        # add META_API_KEY, and a voice (ELEVENLABS_API_KEY or TTS_URL)
+npm run relay               # ws://127.0.0.1:8787
+```
+
+Then open the app with `?muse` (or set provider to "Meta Muse (relay)" in the panel) and talk as usual. Push-to-talk opens one transcription stream per turn; open mic keeps one stream and lets the model's endpointing decide turns, with barge-in when the visitor talks over the head.
+
+- **No key yet?** `npm run relay:mock` runs the same pipeline with a fake brain that hands your own voice back, so the browser side, states and mouth can be tested offline.
+- **Voice.** Meta has no text-to-speech on the API yet. `TTS_PROVIDER=elevenlabs` uses ElevenLabs' plain TTS (your existing account), `custom` POSTs `{text, sampleRate}` to `TTS_URL` and expects raw PCM16 mono 24 kHz back (the slot for an internal Meta voice), `none` keeps the head silent but thinking.
+- **Hosting** so a phone, a Pi or any browser can use it with nothing on your laptop: serverless on Vercel for push-to-talk, or a small container for open mic. See below.
+- **Persona and memory.** The system prompt comes from `config/persona.md` (meetup) or, with the env var `PERSONA=config/persona-offsite.md`, the work-offsite persona, whose `{{EVENT}}`, `{{PLACE}}` and `{{HOST}}` placeholders are filled from `PERSONA_EVENT`, `PERSONA_PLACE` and `PERSONA_HOST`. Set these in Vercel like the keys. The last 12 turns are kept per conversation. A shared event-long story is a few lines here: keep a running summary and prepend it.
+- **Debugging.** `DEBUG=1 npm run relay` logs every message; the app's `?debug` page checks that the relay answers.
+
+### Hosting: serverless on Vercel (push-to-talk)
+
+For push-to-talk, each turn is one HTTP request: the utterance goes up, the reply streams back. That runs as a Vercel Function in this repo (`api/turn.js`) next to the page, so nothing runs on your laptop and no extra service is needed. In the Vercel project settings add these environment variables, then deploy:
+
+| Variable | Value |
+| --- | --- |
+| `META_API_KEY` | from dev.meta.ai |
+| `RELAY_TOKEN` | any long random string, e.g. `openssl rand -hex 16` |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | the voice (or `TTS_PROVIDER=custom` + `TTS_URL`) |
+
+Open the page once with the token and it is remembered in that browser:
+
+```
+https://talking-head-kappa-ten.vercel.app/?muse&token=YOUR_TOKEN
+```
+
+On a hosted page `?muse` defaults the endpoint to the page's own `/api/turn`. Limits on the Hobby plan: 300 s per function call (the app asks for 60), 4.5 MB per request, which caps an utterance at 60 s. The endpoint refuses to run without `RELAY_TOKEN`, since it is public by nature. `vercel.json` enables request cancellation so a barge-in also stops the upstream calls.
+
+Latency is a little higher than the WebSocket relay because transcription starts after you release the button rather than during: expect about a second and a half to first sound.
+
+### Hosting: the WebSocket relay (open mic)
+
+Open-mic mode needs streaming speech-to-text with the model's own endpointing, which needs a long-lived process. Vercel, Azure Functions and Supabase Edge Functions do not fit that; a small container does. The relay ships with a `Dockerfile`, a `fly.toml` and `npm start`, and also serves `POST /turn` for push-to-talk clients.
+
+- **Azure Container Apps**: see `docs/azure.md` for the exact commands. Builds the Dockerfile in Azure, scales to zero, WebSockets on the HTTPS hostname. A GitHub Actions workflow (`.github/workflows/deploy-relay-azure.yml`) redeploys on push once its secrets are set.
+- **Fly.io**: `fly launch --no-deploy`, `fly secrets set META_API_KEY=... ELEVENLABS_API_KEY=... ELEVENLABS_VOICE_ID=... RELAY_TOKEN=...`, `fly deploy`. About $2 a month, scales to zero.
+- **Railway or Render**: connect the repo, start command `npm start`, same variables.
+
+Then open the app with `?muse&relay=wss://<host>&token=YOUR_TOKEN`. `RELAY_TOKEN` is required whenever the relay listens beyond localhost, and mic access needs `https://` on the page with `wss://` to the relay, which all of these provide.
+
+## Choosing the microphone
+
+The Agent folder has a **microphone** list (labels appear after the mic permission is granted, so open the panel after Start). It matters on machines with virtual inputs such as Steam Streaming Microphone, VoiceMeeter or a virtual cable, which the browser may pick by default and which deliver silence. The `?debug` page names the device in use and flags virtual-looking ones, and the Muse provider logs when a turn's audio was silent.
+
 ## Keyboard map
 
 | Key | Action |
@@ -141,7 +192,10 @@ google-chrome --kiosk --autoplay-policy=no-user-gesture-required \
 
 | Module | Responsibility |
 | --- | --- |
-| `src/agent/` | `VoiceAgent` interface, ElevenLabs adapter, `MicLoopAgent` and `EchoAgent` test adapters, `SessionManager` (connect on demand, idle timeout, reconnect). |
+| `src/agent/` | `VoiceAgent` interface, ElevenLabs adapter, `MuseAgent` (talks to the relay), `MicLoopAgent` and `EchoAgent` test adapters, `SessionManager` (connect on demand, idle timeout, reconnect). |
+| `server/pipeline.mjs` | The Meta Muse pipeline: one-shot Voice Transcribe, Muse Spark streaming, sentence-chunked text-to-speech, the framed HTTP turn handler, mock mode. |
+| `server/relay.mjs` | Long-lived relay: WebSocket sessions with streaming Voice Transcribe (open mic, barge-in) plus `POST /turn`. |
+| `api/turn.js` | Vercel Function wrapping the HTTP turn handler. |
 | `src/audio/analyzer.ts` | Frequency data to loudness + brightness. |
 | `src/behavior/` | Mouth envelope follower; behavior engine turning state + level into `FaceParams` (blinks, saccades, brows, glow). |
 | `src/face/` | Draws `FaceParams` to a 1024×1024 canvas; test pattern. |

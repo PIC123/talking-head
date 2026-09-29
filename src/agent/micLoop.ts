@@ -1,5 +1,5 @@
 import { BaseAgent, type AgentAudioLevel } from './types';
-import { StreamAnalyzer, getAudioContext } from '../audio/analyzer';
+import { StreamAnalyzer, getAudioContext, openMic } from '../audio/analyzer';
 
 /**
  * Test agent with no provider: your own mic drives the mouth directly.
@@ -8,6 +8,9 @@ import { StreamAnalyzer, getAudioContext } from '../audio/analyzer';
  */
 export class MicLoopAgent extends BaseAgent {
   readonly name = 'micloop';
+  constructor(private readonly micDeviceId = '') {
+    super();
+  }
   private stream: MediaStream | null = null;
   private analyzer: StreamAnalyzer | null = null;
   private micOn = false;
@@ -15,7 +18,7 @@ export class MicLoopAgent extends BaseAgent {
   async connect(): Promise<void> {
     this.setState('connecting');
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.stream = await openMic(this.micDeviceId);
       this.analyzer = new StreamAnalyzer(getAudioContext());
       this.analyzer.connectStream(this.stream);
       this.setState('idle');
@@ -53,6 +56,9 @@ export class MicLoopAgent extends BaseAgent {
  */
 export class EchoAgent extends BaseAgent {
   readonly name = 'echo';
+  constructor(private readonly micDeviceId = '') {
+    super();
+  }
   private stream: MediaStream | null = null;
   private recorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
@@ -63,7 +69,7 @@ export class EchoAgent extends BaseAgent {
   async connect(): Promise<void> {
     this.setState('connecting');
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.stream = await openMic(this.micDeviceId);
       this.analyzer = new StreamAnalyzer(getAudioContext());
       this.setState('idle');
     } catch (e) {
