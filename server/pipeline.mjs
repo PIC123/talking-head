@@ -37,16 +37,30 @@ export const MAX_UTTERANCE_SEC = 60;
 const FALLBACK_PERSONA =
   'You are a projected face on a mask at an embodied-AI meetup. Speak in one to three short sentences, warm and a little wry, and usually ask the visitor something back. You know you have no body and can only hear, not see.';
 
+/**
+ * Persona text. PERSONA names a file (default config/persona.md; config/persona-offsite.md is the
+ * work-offsite one). {{EVENT}}, {{PLACE}} and {{HOST}} placeholders are filled from PERSONA_EVENT,
+ * PERSONA_PLACE and PERSONA_HOST so the same file serves different rooms.
+ */
 export const PERSONA = (() => {
-  const candidates = [env('PERSONA'), path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'config', 'persona.md'), path.join(process.cwd(), 'config', 'persona.md')].filter(Boolean);
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const name = env('PERSONA', 'config/persona.md');
+  const candidates = [name, path.join(here, '..', name), path.join(process.cwd(), name), path.join(here, '..', 'config', path.basename(name))];
+  let text = FALLBACK_PERSONA;
   for (const p of candidates) {
     try {
-      return readFileSync(p, 'utf8');
+      text = readFileSync(p, 'utf8');
+      break;
     } catch {
       /* try the next location */
     }
   }
-  return FALLBACK_PERSONA;
+  const vars = {
+    EVENT: env('PERSONA_EVENT', 'the team offsite'),
+    PLACE: env('PERSONA_PLACE', 'the office'),
+    HOST: env('PERSONA_HOST', 'someone on the team'),
+  };
+  return text.replace(/\{\{(EVENT|PLACE|HOST)\}\}/g, (_, k) => vars[k]);
 })();
 
 export const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);

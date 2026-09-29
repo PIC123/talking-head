@@ -60,7 +60,7 @@ Then open the app with `?muse` (or set provider to "Meta Muse (relay)" in the pa
 - **No key yet?** `npm run relay:mock` runs the same pipeline with a fake brain that hands your own voice back, so the browser side, states and mouth can be tested offline.
 - **Voice.** Meta has no text-to-speech on the API yet. `TTS_PROVIDER=elevenlabs` uses ElevenLabs' plain TTS (your existing account), `custom` POSTs `{text, sampleRate}` to `TTS_URL` and expects raw PCM16 mono 24 kHz back (the slot for an internal Meta voice), `none` keeps the head silent but thinking.
 - **Hosting** so a phone, a Pi or any browser can use it with nothing on your laptop: serverless on Vercel for push-to-talk, or a small container for open mic. See below.
-- **Persona and memory.** The relay sends `config/persona.md` as the system prompt and keeps the last 12 turns per connection. A shared event-long story is a few lines here: keep a running summary and prepend it.
+- **Persona and memory.** The system prompt comes from `config/persona.md` (meetup) or, with the env var `PERSONA=config/persona-offsite.md`, the work-offsite persona, whose `{{EVENT}}`, `{{PLACE}}` and `{{HOST}}` placeholders are filled from `PERSONA_EVENT`, `PERSONA_PLACE` and `PERSONA_HOST`. Set these in Vercel like the keys. The last 12 turns are kept per conversation. A shared event-long story is a few lines here: keep a running summary and prepend it.
 - **Debugging.** `DEBUG=1 npm run relay` logs every message; the app's `?debug` page checks that the relay answers.
 
 ### Hosting: serverless on Vercel (push-to-talk)

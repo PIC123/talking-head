@@ -4,7 +4,7 @@
     "api/turn.js": {
       "maxDuration": 60,
       "supportsCancellation": true,
-      "includeFiles": "config/persona.md"
+      "includeFiles": "config/*.md"
     }
   }
 }
