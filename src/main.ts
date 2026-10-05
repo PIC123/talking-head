@@ -83,6 +83,7 @@ function setEditMode(on: boolean): void {
         underlay.clear();
         sync.send({ type: 'underlay' });
       },
+      onClosePanel: () => !isControl && setEditMode(false),
     });
   }
   showPanel(on);
@@ -321,10 +322,33 @@ window.addEventListener('blur', () => {
 // Pointer-based talk: hold the right mouse button (presenter clicker), or on a touch screen
 // hold a finger anywhere in show mode. Edit mode keeps touch free for the panel and handles.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
+// The top strip of the screen is the menu hotspot (and, on phones, under the status bar), so a
+// finger there never starts a turn.
+const TALK_DEAD_TOP = 0.15;
 const isTouchTalk = (e: PointerEvent) =>
   e.pointerType === 'touch' &&
   !editMode &&
-  !(e.target as HTMLElement | null)?.closest('button, #start, #debugbar, #panel, #log, .handle');
+  e.clientY > window.innerHeight * TALK_DEAD_TOP &&
+  !(e.target as HTMLElement | null)?.closest('button, #start, #debugbar, #panel, #log, #hot, .handle');
+
+// Phone menu: a short tap on the hotspot toggles the edit panel (pointer events, not a synthesized
+// click, so a phone's touch handling cannot swallow it). A drag or a long hold does nothing.
+const hot = document.getElementById('hot')!;
+let hotDown: { x: number; y: number; t: number } | null = null;
+hot.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  hotDown = { x: e.clientX, y: e.clientY, t: performance.now() };
+});
+hot.addEventListener('pointerup', (e) => {
+  e.stopPropagation();
+  if (!hotDown) return;
+  const tap = performance.now() - hotDown.t < 700 && Math.hypot(e.clientX - hotDown.x, e.clientY - hotDown.y) < 24;
+  hotDown = null;
+  if (tap && !isControl) setEditMode(!editMode);
+});
+hot.addEventListener('pointercancel', () => (hotDown = null));
+hot.addEventListener('click', (e) => e.stopPropagation());
 window.addEventListener('pointerdown', (e) => {
   if (e.button === 2 || isTouchTalk(e)) {
     if (isTouchTalk(e)) e.preventDefault();

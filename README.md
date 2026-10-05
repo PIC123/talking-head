@@ -71,7 +71,7 @@ Config autosaves to localStorage 500 ms after any change and restores on reload.
 
 ## On a phone
 
-The same URL works on a phone or tablet: tap Start, then hold a finger anywhere on the screen to talk. Editing is still possible (the panel is cramped) but the phone is mainly a handy way to demo the agent without the projector. iOS ignores fullscreen requests; add the page to the home screen for a full-screen face.
+The same URL works on a phone or tablet: tap Start, then hold a finger on the face (anywhere below the top 15% of the screen) to talk. A short tap in that top strip opens the edit panel, so the mapping can be done on the phone itself (drag the orange corners in stage 2, use the sliders, **Close panel** at the bottom of the panel to return to the show). The strip is invisible and never starts a turn. Editing is still possible (the panel is cramped) but the phone is mainly a handy way to demo the agent without the projector. iOS ignores fullscreen requests; add the page to the home screen for a full-screen face.
 
 ## Aligning to the mask
 

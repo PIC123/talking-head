@@ -7,6 +7,7 @@ export interface PanelHooks {
   onFullscreen: () => void;
   onPickUnderlay: () => void;
   onClearUnderlay: () => void;
+  onClosePanel: () => void;
 }
 
 /** tweakpane panel with every tunable. Shown in edit mode only. */
@@ -126,6 +127,7 @@ export function createPanel(store: ConfigStore, hooks: PanelHooks): Pane {
     hooks.onAgentChanged();
   });
   io.addButton({ title: 'Fullscreen (F)' }).on('click', hooks.onFullscreen);
+  io.addButton({ title: 'Close panel (E)' }).on('click', hooks.onClosePanel);
 
   // Keep the panel in sync when values change elsewhere (drag handles, keys, import, undo).
   store.onChange(() => pane.refresh());

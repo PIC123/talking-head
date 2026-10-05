@@ -81,6 +81,12 @@
         font: 13px ui-monospace, monospace; color: #000; background: #ffb400; display: none; z-index: 5; pointer-events: none;
       }
       body.control #banner { display: block; }
+      /* Phone menu trigger: an invisible strip across the top 15% of the screen (where a touch never
+         starts a turn, and below the phone's status bar). A short tap toggles the edit panel. In edit
+         mode it shrinks to a top-left corner box so the panel and the corner handles stay reachable. */
+      #hot { position: absolute; top: 0; left: 0; right: 0; height: 15vh; z-index: 30; opacity: 0; touch-action: none; }
+      body.edit #hot { right: auto; width: 64px; height: 64px; }
+      body.control #hot, body.debug #hot { display: none; }
       body.control #hud { bottom: auto; top: 36px; }
       body.control #log { bottom: auto; top: 36px; right: auto; left: 12px; max-height: 30vh; width: 340px; margin-top: 60px; }
     </style>
@@ -101,6 +107,7 @@
       </div>
       <div id="hud"></div>
       <div id="log"></div>
+      <div id="hot" title="menu"></div>
     </div>
     <div id="start">
       <button id="start-btn">Start</button>
