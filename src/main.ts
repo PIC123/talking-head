@@ -12,6 +12,8 @@ import { Underlay } from './ui/underlay';
 import { Sync } from './sync';
 import { copyLog, runDiagnostics } from './ui/diagnostics';
 import personaMd from '../config/persona.md?raw';
+import { CalibrationUI } from './calibrate/ui';
+import type { CalFrame } from './calibrate/sweep';
 
 const params = new URLSearchParams(location.search);
 /** ?control turns this tab into a remote for the face window open in the same browser. */
@@ -74,6 +76,9 @@ const underlay = new Underlay(store);
 
 let editMode = false;
 let testPattern = false;
+/** While set, the projector shows this calibration frame instead of the face. */
+let calFrame: CalFrame | null = null;
+let cal: CalibrationUI | null = null;
 let panel: ReturnType<typeof createPanel> | null = null;
 let fps = 0;
 let fpsAcc = 0;
@@ -93,10 +98,30 @@ function setEditMode(on: boolean): void {
         underlay.clear();
         sync.send({ type: 'underlay' });
       },
+      onCalibrate: () => toggleCalibration(),
     });
   }
   showPanel(on);
 }
+
+/**
+ * Auto-calibration menu: built on first use (it opens the camera only when asked). Lives on the
+ * face window because that is the screen mirrored to the projector. The control tab has no camera role.
+ */
+function toggleCalibration(): void {
+  if (isControl) return log('info', 'calibration runs on the face window (the phone that is mirrored to the projector)');
+  cal ??= new CalibrationUI(store, editor, {
+    setFrame: (f) => (calFrame = f),
+    outputSize: () => ({ W: out.width, H: out.height }),
+    log,
+    onToggleEdit: () => setEditMode(!editMode),
+  });
+  cal.toggle();
+}
+document.getElementById('hot')!.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleCalibration();
+});
 
 /** Once a control tab is driving, keep the panel off the projection; handles and HUD still show. */
 function showPanel(on: boolean): void {
@@ -241,6 +266,9 @@ window.addEventListener('keydown', (e) => {
     case 'KeyP':
       togglePause();
       break;
+    case 'KeyC':
+      if (!ctrl) toggleCalibration();
+      break;
     case 'KeyH':
       editor.pushUndo();
       m.transform.flipH = !m.transform.flipH;
@@ -334,7 +362,7 @@ window.addEventListener('contextmenu', (e) => e.preventDefault());
 const isTouchTalk = (e: PointerEvent) =>
   e.pointerType === 'touch' &&
   !editMode &&
-  !(e.target as HTMLElement | null)?.closest('button, #start, #debugbar, #panel, #log, .handle');
+  !(e.target as HTMLElement | null)?.closest('button, #start, #debugbar, #panel, #log, #cal, #hot, .handle');
 window.addEventListener('pointerdown', (e) => {
   if (e.button === 2 || isTouchTalk(e)) {
     if (isTouchTalk(e)) e.preventDefault();
@@ -363,7 +391,8 @@ function frame(now: number): void {
   );
   if (testPattern) drawTestPattern(face.canvas.getContext('2d')!);
   else face.draw(params, store.cfg.face, dt);
-  out.draw(face.canvas, store.cfg.mapping);
+  if (calFrame) out.drawCal(calFrame);
+  else out.draw(face.canvas, store.cfg.mapping);
 
   if (!isControl && (editMode || isDebug || sync.peerSeen)) {
     fpsAcc += dt;
@@ -387,7 +416,7 @@ function frame(now: number): void {
 }
 
 // Handy in the console and for tests: th.store.cfg, th.editor.
-(window as unknown as { th: unknown }).th = { store, editor, session, sync };
+(window as unknown as { th: unknown }).th = { store, editor, session, sync, calibrate: toggleCalibration };
 
 // ---------------- Boot
 window.addEventListener('error', (e) => log('err', `uncaught: ${e.message}`));

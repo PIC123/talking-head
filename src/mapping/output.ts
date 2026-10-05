@@ -1,6 +1,7 @@
 import type { Config } from '../config/schema';
 import { FACE_SIZE } from '../face/renderer';
 import { cssCornerPin, isIdentityPin, type Pt } from './homography';
+import type { CalFrame } from '../calibrate/sweep';
 
 /**
  * Output stage: draws the face canvas onto the fullscreen canvas with the 2D transform,
@@ -76,6 +77,30 @@ export class OutputStage {
     ctx.restore();
 
     this.applyCornerPin(m.cornerPin as Pt[]);
+  }
+
+  /**
+   * Calibration frames: plain black, plain white, or one bright dot at a normalised position,
+   * drawn with no corner pin, mask or hotspot so the camera sees raw projector coordinates.
+   */
+  drawCal(f: CalFrame): void {
+    const ctx = this.ctx;
+    const W = this.width, H = this.height;
+    ctx.save();
+    ctx.setTransform(this.canvas.width / W, 0, 0, this.canvas.height / H, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = f.kind === 'white' ? '#fff' : '#000';
+    ctx.fillRect(0, 0, W, H);
+    if (f.kind === 'dot') {
+      const r = Math.max(10, Math.min(W, H) * 0.035);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(f.u * W, f.v * H, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    this.applyCornerPin([[0, 0], [1, 0], [1, 1], [0, 1]]);
   }
 
   private getMask(e: Config['mapping']['ellipseMask'], W: number, H: number): HTMLCanvasElement {

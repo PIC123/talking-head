@@ -103,6 +103,7 @@ The Agent folder has a **microphone** list (labels appear after the mic permissi
 | --- | --- |
 | Space (hold), right mouse button (hold), finger on screen (hold, show mode), or the HOLD TO TALK button (edit mode / control tab) | Push to talk |
 | Enter, MediaPlayPause, AudioVolumeUp, F13 | Also talk keys by default (editable in the Agent folder as "extra talk keys"), so a Bluetooth shutter remote or a headset button can drive it. Tick "talk = toggle" for one-shot buttons: press to start, press again to stop. |
+| C | Open / close the auto-calibration menu (also the near-invisible top-right corner, see below) |
 | P | Pause / resume the agent. Paused, talk presses are ignored and any open session ends at once, so no credits are used while you map or rehearse. The face keeps its idle animation. |
 | E | Toggle edit mode (panel, HUD, log, cursor) |
 | T | Toggle test pattern (grid, crosshair, circle, orientation marks) |
@@ -132,6 +133,19 @@ The same URL works on a phone or tablet: tap Start, then hold a finger anywhere 
 4. Stage 3: enable the ellipse mask and feather it to cut spill past the mask edge.
 5. Stage 4: enable hotspot compensation to dim the bright center of a rear projection.
 6. Press T, then tune the face **Layout** (eye spacing, eye Y, mouth Y, mouth width) until the features land on the mask's features. Press E. Ctrl+S to back up the config.
+
+## Auto calibration from a phone
+
+When the face runs on a phone whose screen is mirrored to the projector, the phone's rear camera can do the mapping for you. No markers or printed patterns are needed.
+
+1. Mirror the phone to the projector and open the face page on it. Tap Start.
+2. Tap the top-right corner of the screen (a near-invisible 44 px hotspot; press C on a keyboard) to open the **Auto calibration** menu.
+3. **Camera on**, then hold the phone still with the whole mask in the picture, roughly from where the projector is. Dim the room if you can.
+4. **Sweep**: the projector flashes 16 white dots one by one against black (about eight seconds). The camera finds each dot and fits the projector-to-camera mapping. Every control is hidden while the dots show, since the phone screen is the projection.
+5. The menu then shows the mask lit flat white. **Tap the middle of the mask** in that picture. A colour region grow finds the mask outline (adjust *mask colour tolerance* if it spills onto the wall or stops short). The face is placed live on the projector so you can check it.
+6. **Accept** keeps it; **Undo** restores the previous mapping. The result is a normal corner pin plus an ellipse mask, so the edit panel, handles and keys fine-tune it as before.
+
+Fewer than five dots seen means the camera could not tell the dots from the room: move closer, dim the lights, or point the camera more squarely at the mask. The mapping assumes the mask is a flat-ish surface and stays put; nudging it slightly afterwards is fine. **Hide menu** takes everything off the projection for the demo; the hotspot brings it back.
 
 ## Troubleshooting on a phone
 

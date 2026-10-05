@@ -7,6 +7,7 @@ export interface PanelHooks {
   onFullscreen: () => void;
   onPickUnderlay: () => void;
   onClearUnderlay: () => void;
+  onCalibrate: () => void;
 }
 
 /** tweakpane panel with every tunable. Shown in edit mode only. */
@@ -89,6 +90,7 @@ export function createPanel(store: ConfigStore, hooks: PanelHooks): Pane {
   beh.addBinding(c.behavior, 'attractAfterSec', { min: 5, max: 600, step: 5 }).on('change', touch);
 
   const map = pane.addFolder({ title: 'Mapping', expanded: false });
+  map.addButton({ title: 'Auto calibrate with camera (C)' }).on('click', hooks.onCalibrate);
   const tr = map.addFolder({ title: '1 Transform', expanded: true });
   tr.addBinding(c.mapping.transform, 'x', { min: -2000, max: 2000, step: 1 }).on('change', touch);
   tr.addBinding(c.mapping.transform, 'y', { min: -2000, max: 2000, step: 1 }).on('change', touch);
