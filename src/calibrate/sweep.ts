@@ -1,18 +1,24 @@
-import { type P, type Mat3, apply, fitHomographyRobust, invert, fitHomography } from './math';
-import { findDot, regionGrow, type Region } from './detect';
+import type { P } from './math';
+import { regionGrow, type Region } from './detect';
 import { CameraFeed, sleep } from './camera';
 
-/** What the projector should show right now. Coordinates are normalised output space. */
-export type CalFrame = { kind: 'black' } | { kind: 'white' } | { kind: 'dot'; u: number; v: number };
+/** What the projector should show right now. */
+export type CalFrame =
+  | { kind: 'black' }
+  | { kind: 'white' }
+  | { kind: 'dot'; u: number; v: number }
+  /** Gray-code stripe pattern: 2^bits stripes along `axis`, showing bit `bit` (0 = coarsest), or its inverse. */
+  | { kind: 'stripes'; axis: 'x' | 'y'; bit: number; bits: number; inverse: boolean };
 
-export interface SweepResult {
-  /** projector (normalised) -> camera (pixels, work resolution) */
-  H: Mat3;
-  dotsSeen: number;
-  dotsTotal: number;
-  rms: number;
-  /** True once H comes from dots that all landed on the mask itself. */
-  refined: boolean;
+/** Per-camera-pixel projector coordinates decoded from the stripe patterns. */
+export interface ScanResult {
+  width: number;
+  height: number;
+  /** Projector-normalised u/v per camera pixel; meaningful only where valid[i] is set. */
+  u: Float32Array;
+  v: Float32Array;
+  valid: Uint8Array;
+  validCount: number;
   /** The flat-white camera frame, for the mask tap. */
   lit: ImageData;
 }
@@ -20,6 +26,12 @@ export interface SweepResult {
 export interface Placement {
   cornerPin: P[];
   ellipse: { cx: number; cy: number; rx: number; ry: number };
+  flipH: boolean;
+  flipV: boolean;
+  /** Pixels of the mask region that carried a usable code. */
+  coded: number;
+  /** |correlation| between camera axes and projector axes; low values mean a rotated or noisy scan. */
+  axisFit: number;
 }
 
 /**
@@ -29,146 +41,146 @@ export interface Placement {
  */
 export const FACE_BOX = { x0: (512 - 340) / 1024, y0: (512 + 20 - 420) / 1024, x1: (512 + 340) / 1024, y1: (512 + 20 + 420) / 1024 };
 
-/** Coarse pass: a 4x4 grid over most of the projector frame. */
-const GRID: P[] = [];
-for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) GRID.push([0.15 + (0.7 * i) / 3, 0.15 + (0.7 * j) / 3]);
+/** Stripe resolution per axis: 2^6 = 64 stripes, about 13 px on an 854-wide projector. */
+export const BITS = 6;
 
-/** Flash each point in turn and return the (projector, camera) pairs that were seen. */
-async function flashDots(cam: CameraFeed, show: (f: CalFrame) => void, status: (s: string) => void, pts: P[], label: string, settleMs: number): Promise<{ src: P[]; dst: P[] }> {
-  show({ kind: 'black' });
-  await sleep(settleMs * 2);
-  let ref = cam.grab();
-  const src: P[] = [], dst: P[] = [];
-  for (let i = 0; i < pts.length; i++) {
-    if (i % 4 === 0 && i > 0) {
-      // Fresh dark reference every few dots so the phone's auto-exposure drift does not count as a dot.
-      show({ kind: 'black' });
-      await sleep(settleMs);
-      ref = cam.grab();
-    }
-    const [u, v] = pts[i];
-    show({ kind: 'dot', u, v });
-    await sleep(settleMs);
-    cam.grab(); // discard one frame to ride out pipeline latency
-    await sleep(40);
-    const hit = findDot(ref, cam.grab());
-    status(`${label} dot ${i + 1}/${pts.length}: ${hit ? 'seen' : 'not seen'}`);
-    if (hit) {
-      src.push([u, v]);
-      dst.push(hit.p);
-    }
-  }
-  return { src, dst };
+const luma = (d: Uint8ClampedArray, i: number) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+
+function lumaOf(img: ImageData): Float32Array {
+  const out = new Float32Array(img.width * img.height);
+  for (let i = 0, k = 0; i < img.data.length; i += 4, k++) out[k] = luma(img.data, i);
+  return out;
+}
+
+/** Gray code for stripe index i. */
+export const gray = (i: number) => i ^ (i >> 1);
+/** Inverse Gray code. */
+export function ungray(g: number): number {
+  let b = g;
+  for (let m = g >> 1; m; m >>= 1) b ^= m;
+  return b;
 }
 
 /**
- * Coarse sweep over the whole frame (dots land on the mask and whatever is around it), fit the
- * projector-to-camera homography, then capture a flat-white frame for the mask tap.
+ * Structured-light scan: for each axis and each bit, show the Gray-code stripe pattern and its
+ * inverse and record which was brighter at every camera pixel. Decoding the bits gives the
+ * projector coordinate each camera pixel is looking at, on whatever surface it lands on, so dots on
+ * the mask and dots on the wall behind never get mixed. Ends with a flat-white frame for the mask tap.
  */
-export async function runSweep(cam: CameraFeed, show: (f: CalFrame) => void, status: (s: string) => void, settleMs = 320): Promise<SweepResult> {
-  const { src, dst } = await flashDots(cam, show, status, GRID, 'coarse', settleMs);
+export async function runScan(cam: CameraFeed, show: (f: CalFrame) => void, status: (s: string) => void, settleMs = 300, minMargin = 8): Promise<ScanResult> {
+  const grabLuma = async () => {
+    await sleep(settleMs);
+    cam.grab(); // discard one frame to ride out pipeline latency
+    await sleep(40);
+    return lumaOf(cam.grab());
+  };
+  show({ kind: 'black' });
+  const dark = await grabLuma();
   show({ kind: 'white' });
-  await sleep(settleMs * 2);
-  const lit = cam.grab();
-  if (src.length < 5) throw new Error(`only ${src.length} of ${GRID.length} dots seen. Point the camera at the mask from near the projector, dim the room, and try again.`);
-  const fit = fitHomographyRobust(src, dst, Math.max(3, cam.width * 0.03), 5);
-  if (!fit) throw new Error('could not fit the projector-to-camera mapping');
-  return { H: fit.H, dotsSeen: fit.used, dotsTotal: GRID.length, rms: fit.rms, refined: false, lit };
+  await sleep(settleMs);
+  const litImg = cam.grab();
+  const bright = await grabLuma();
+  const n = cam.width * cam.height;
+  const valid = new Uint8Array(n);
+  let lit = 0;
+  for (let i = 0; i < n; i++) if (bright[i] - dark[i] >= 20) { valid[i] = 1; lit++; }
+  if (lit < n * 0.01) throw new Error('the camera sees almost no projector light. Dim the room, move closer, and make sure the projector output is this screen.');
+
+  const codes: Record<'x' | 'y', Uint16Array> = { x: new Uint16Array(n), y: new Uint16Array(n) };
+  const total = 2 * BITS;
+  let step = 0;
+  for (const axis of ['x', 'y'] as const) {
+    for (let bit = 0; bit < BITS; bit++) {
+      step++;
+      status(`scanning ${step}/${total}: keep the phone still`);
+      show({ kind: 'stripes', axis, bit, bits: BITS, inverse: false });
+      const a = await grabLuma();
+      show({ kind: 'stripes', axis, bit, bits: BITS, inverse: true });
+      const b = await grabLuma();
+      const shift = BITS - 1 - bit;
+      for (let i = 0; i < n; i++) {
+        if (!valid[i]) continue;
+        const d = a[i] - b[i];
+        if (Math.abs(d) < minMargin) { valid[i] = 0; continue; }
+        if (d > 0) codes[axis][i] |= 1 << shift;
+      }
+    }
+  }
+  show({ kind: 'black' });
+  const u = new Float32Array(n), v = new Float32Array(n);
+  const stripes = 1 << BITS;
+  let validCount = 0;
+  for (let i = 0; i < n; i++) {
+    if (!valid[i]) continue;
+    validCount++;
+    u[i] = (ungray(codes.x[i]) + 0.5) / stripes;
+    v[i] = (ungray(codes.y[i]) + 0.5) / stripes;
+  }
+  if (validCount < 200) throw new Error(`only ${validCount} camera pixels decoded. Dim the room, hold the phone still, and try again.`);
+  return { width: cam.width, height: cam.height, u, v, valid, validCount, lit: litImg };
 }
 
 /** The mask region in the lit frame, grown from a tap. */
-export function findMask(sweep: SweepResult, tap: P, tol: number): Region {
-  const region = regionGrow(sweep.lit, tap, tol);
+export function findMask(scan: ScanResult, tap: P, tol: number): Region {
+  const region = regionGrow(scan.lit, tap, tol);
   if (!region) throw new Error('nothing found at the tap. Tap the middle of the mask in the picture.');
   return region;
 }
 
-/** Mask bounding box in camera pixels, slightly padded, as a quad (TL, TR, BR, BL). */
-function maskQuadCam(region: Region, pad = 0.02): P[] {
-  const b = region.bbox;
-  const w = b.x1 - b.x0, h = b.y1 - b.y0;
-  return [
-    [b.x0 - pad * w, b.y0 - pad * h],
-    [b.x1 + pad * w, b.y0 - pad * h],
-    [b.x1 + pad * w, b.y1 + pad * h],
-    [b.x0 - pad * w, b.y1 + pad * h],
-  ];
+function percentile(sorted: Float32Array, p: number): number {
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
+}
+
+function corr(xs: Float32Array, ys: Float32Array): number {
+  const n = xs.length;
+  let mx = 0, my = 0;
+  for (let i = 0; i < n; i++) { mx += xs[i]; my += ys[i]; }
+  mx /= n; my /= n;
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
+  return sxy / Math.sqrt(sxx * syy || 1);
 }
 
 /**
- * Refined sweep: using the coarse mapping to aim, flash a grid of dots that all fall inside the mask
- * region, and refit from those alone. The mask sits in front of whatever the coarse dots hit, so
- * only dots on the mask describe its plane. Falls back to the coarse mapping if too few are seen.
+ * Where the mask sits in the projector's frame: the extent of the decoded projector coordinates
+ * over the tapped region (robust percentiles). The face box is scaled onto that rectangle. Flips
+ * come from the sign of the camera-to-projector correlation, so a mirror fold or an inverted mount
+ * is handled. Assumes the projector faces the mask roughly square-on, which the rig does; the
+ * camera can be anywhere it sees the mask.
  */
-export async function refineSweep(cam: CameraFeed, show: (f: CalFrame) => void, status: (s: string) => void, sweep: SweepResult, region: Region, settleMs = 320): Promise<SweepResult> {
-  const Hinv = invert(sweep.H);
-  if (!Hinv) throw new Error('mapping not invertible');
-  // The mask box in projector space (coarse estimate), shrunk a little so dots stay on the mask.
-  const q = maskQuadCam(region, -0.1).map((p) => apply(Hinv, p));
-  const pts: P[] = [];
-  const N = 4;
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const s = i / (N - 1), t = j / (N - 1);
-    // Bilinear point inside the quad.
-    const top: P = [q[0][0] + (q[1][0] - q[0][0]) * s, q[0][1] + (q[1][1] - q[0][1]) * s];
-    const bot: P = [q[3][0] + (q[2][0] - q[3][0]) * s, q[3][1] + (q[2][1] - q[3][1]) * s];
-    const x = top[0] + (bot[0] - top[0]) * t, y = top[1] + (bot[1] - top[1]) * t;
-    if (x > 0.01 && x < 0.99 && y > 0.01 && y < 0.99) pts.push([x, y]);
+export function placeFace(scan: ScanResult, region: Region, W: number, H: number): Placement {
+  const us: number[] = [], vs: number[] = [], xs: number[] = [], ys: number[] = [];
+  const w = scan.width;
+  for (let i = 0; i < region.mask.length; i++) {
+    if (!region.mask[i] || !scan.valid[i]) continue;
+    us.push(scan.u[i]); vs.push(scan.v[i]); xs.push(i % w); ys.push(Math.floor(i / w));
   }
-  if (pts.length < 5) throw new Error('the mask maps outside the projector frame; re-aim the projector or the camera and retry');
-  const { src, dst } = await flashDots(cam, show, status, pts, 'mask', settleMs);
-  if (src.length < 5) {
-    status(`only ${src.length} dots seen on the mask; using the coarse mapping`);
-    return sweep;
-  }
-  const fit = fitHomographyRobust(src, dst, Math.max(3, cam.width * 0.02), 5);
-  if (!fit) return sweep;
-  return { ...sweep, H: fit.H, dotsSeen: fit.used, dotsTotal: pts.length, rms: fit.rms, refined: true };
-}
+  if (us.length < 100) throw new Error(`only ${us.length} coded pixels on the mask. Is the mask lit by the projector? Dim the room and retry.`);
+  const U = Float32Array.from(us).sort(), V = Float32Array.from(vs).sort();
+  const pad = 0.5 / (1 << BITS);
+  const rect = { x0: percentile(U, 0.02) - pad, x1: percentile(U, 0.98) + pad, y0: percentile(V, 0.02) - pad, y1: percentile(V, 0.98) + pad };
+  const cxu = corr(Float32Array.from(xs), Float32Array.from(us)), cyv = corr(Float32Array.from(ys), Float32Array.from(vs));
+  const cxv = corr(Float32Array.from(xs), Float32Array.from(vs)), cyu = corr(Float32Array.from(ys), Float32Array.from(us));
+  const axisFit = Math.min(Math.abs(cxu), Math.abs(cyv));
+  if (Math.abs(cxv) + Math.abs(cyu) > Math.abs(cxu) + Math.abs(cyv)) throw new Error('the projector image looks rotated 90° relative to the camera. Rotate the phone to match the projector and retry.');
+  const flipH = cxu < 0, flipV = cyv < 0;
 
-/**
- * Given the camera-space mask region and the sweep's homography, compute the corner pin that puts
- * the face box onto the mask, and an ellipse that trims spill to roughly the mask.
- */
-export function placeFace(sweep: SweepResult, region: Region, W: number, H: number): Placement {
-  const Hinv = invert(sweep.H);
-  if (!Hinv) throw new Error('mapping not invertible');
-  const maskQuad = maskQuadCam(region).map((p) => apply(Hinv, p));
-  // The face canvas is drawn centred, filling the shorter screen side. Its FACE_BOX in
-  // output-normalised coordinates:
+  // The face canvas fills the shorter screen side, centred; flips mirror it about the centre.
+  const fb = FACE_BOX;
+  const bx0 = flipH ? 1 - fb.x1 : fb.x0, bx1 = flipH ? 1 - fb.x0 : fb.x1;
+  const by0 = flipV ? 1 - fb.y1 : fb.y0, by1 = flipV ? 1 - fb.y0 : fb.y1;
   const S = Math.min(W, H);
   const ox = (W - S) / 2 / W, oy = (H - S) / 2 / H, sx = S / W, sy = S / H;
-  const box: P[] = [
-    [ox + FACE_BOX.x0 * sx, oy + FACE_BOX.y0 * sy],
-    [ox + FACE_BOX.x1 * sx, oy + FACE_BOX.y0 * sy],
-    [ox + FACE_BOX.x1 * sx, oy + FACE_BOX.y1 * sy],
-    [ox + FACE_BOX.x0 * sx, oy + FACE_BOX.y1 * sy],
-  ];
-  // M maps output-normalised -> projector-normalised such that the face box lands on the mask quad.
-  const M = fitHomography(box, maskQuad);
-  if (!M) throw new Error('degenerate mask region');
-  const cornerPin = ([[0, 0], [1, 0], [1, 1], [0, 1]] as P[]).map((p) => apply(M, p));
+  const box = { x0: ox + bx0 * sx, x1: ox + bx1 * sx, y0: oy + by0 * sy, y1: oy + by1 * sy };
+  // Affine map taking the box onto the rect, applied to the unit square = corner pin.
+  const kx = (rect.x1 - rect.x0) / (box.x1 - box.x0), ky = (rect.y1 - rect.y0) / (box.y1 - box.y0);
+  const map = ([x, y]: P): P => [rect.x0 + (x - box.x0) * kx, rect.y0 + (y - box.y0) * ky];
+  const cornerPin = ([[0, 0], [1, 0], [1, 1], [0, 1]] as P[]).map(map);
   const ellipse = {
-    cx: (box[0][0] + box[2][0]) / 2,
-    cy: (box[0][1] + box[2][1]) / 2,
-    rx: ((box[2][0] - box[0][0]) / 2) * 1.12,
-    ry: ((box[2][1] - box[0][1]) / 2) * 1.08,
+    cx: (box.x0 + box.x1) / 2,
+    cy: (box.y0 + box.y1) / 2,
+    rx: ((box.x1 - box.x0) / 2) * 1.12,
+    ry: ((box.y1 - box.y0) / 2) * 1.08,
   };
-  return { cornerPin, ellipse };
-}
-
-/**
- * Why a corner pin would show nothing: a corner thrown behind the projection plane (w <= 0, the
- * CSS transform then culls it) or a quad far outside the frame. Returns a message or null.
- */
-export function pinProblem(cornerPin: P[]): string | null {
-  const M = fitHomography([[0, 0], [1, 0], [1, 1], [0, 1]], cornerPin);
-  if (!M) return 'mapping is degenerate';
-  for (const [x, y] of [[0, 0], [1, 0], [1, 1], [0, 1]] as P[]) {
-    if (M[6] * x + M[7] * y + M[8] <= 0) return 'mapping folds over itself (a corner lands behind the screen)';
-  }
-  if (cornerPin.some(([x, y]) => Math.abs(x - 0.5) > 6 || Math.abs(y - 0.5) > 6)) return 'mapping is far outside the frame';
-  const area = Math.abs(cornerPin.reduce((a, [x, y], i) => { const [nx, ny] = cornerPin[(i + 1) % 4]; return a + x * ny - nx * y; }, 0)) / 2;
-  if (area < 0.002) return 'mapping collapses the face to almost nothing';
-  return null;
+  return { cornerPin, ellipse, flipH, flipV, coded: us.length, axisFit };
 }

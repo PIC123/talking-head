@@ -7,7 +7,7 @@ export class CameraFeed {
   readonly width: number;
   readonly height: number;
 
-  constructor(video: HTMLVideoElement, width = 320, height = 240) {
+  constructor(video: HTMLVideoElement, width = 480, height = 360) {
     this.video = video;
     this.width = width;
     this.height = height;

@@ -2,7 +2,7 @@ import type { ConfigStore } from '../config/store';
 import type { MappingEditor } from '../mapping/editor';
 import { defaultConfig, assignDeep } from '../config/schema';
 import { CameraFeed } from './camera';
-import { runSweep, refineSweep, findMask, placeFace, pinProblem, type CalFrame, type SweepResult, type Placement } from './sweep';
+import { runScan, findMask, placeFace, type CalFrame, type ScanResult, type Placement } from './sweep';
 import type { Region } from './detect';
 
 export interface CalibrationHooks {
@@ -16,7 +16,7 @@ export interface CalibrationHooks {
 /**
  * Phone-friendly calibration menu. The phone's screen is mirrored to the projector and its rear
  * camera watches the mask, so this one page both drives the projector and sees the result.
- * Flow: camera on -> sweep (dots) -> tap the mask in the lit picture -> accept.
+ * Flow: camera on -> scan (Gray-code stripes) -> tap the mask in the lit picture -> accept.
  */
 export class CalibrationUI {
   readonly el: HTMLDivElement;
@@ -25,7 +25,7 @@ export class CalibrationUI {
   private status: HTMLDivElement;
   private tolInput: HTMLInputElement;
   private cam: CameraFeed | null = null;
-  private sweep: SweepResult | null = null;
+  private scan: ScanResult | null = null;
   private placement: Placement | null = null;
   private busy = false;
   private before: string | null = null;
@@ -39,7 +39,7 @@ export class CalibrationUI {
       <div class="cal-status" id="cal-status">Mirror this phone to the projector, aim the camera at the mask, then start.</div>
       <div class="cal-row">
         <button data-act="camera">1 Camera on</button>
-        <button data-act="sweep" disabled>2 Sweep</button>
+        <button data-act="sweep" disabled>2 Scan</button>
       </div>
       <div class="cal-pic"><video id="cal-video" playsinline muted></video><canvas id="cal-pic"></canvas></div>
       <label class="cal-tol">mask colour tolerance <input id="cal-tol" type="range" min="25" max="140" value="60"></label>
@@ -137,32 +137,33 @@ export class CalibrationUI {
     await this.cam.open();
     this.el.classList.add('live');
     this.btn.sweep.disabled = false;
-    this.say(`camera: ${this.cam.label || 'ready'}. Frame the whole mask, keep the phone still, then Sweep.`);
+    this.say(`camera: ${this.cam.label || 'ready'}. Frame the whole mask, keep the phone still, then Scan.`);
     this.hooks.log('info', `calibration camera: ${this.cam.label || 'unknown'}`);
   }
 
   private async doSweep(): Promise<void> {
     if (!this.cam) throw new Error('turn the camera on first');
     this.busy = true;
-    this.sweep = null;
+    this.scan = null;
     this.placement = null;
     this.region = null;
     this.lastTap = null;
     this.btn.accept.disabled = true;
-    this.say('sweeping: keep the phone still…');
-    // The phone screen is the projector: hide every control while dots are shown.
+    this.el.classList.remove('lit');
+    this.say('scanning: keep the phone still…');
+    // The phone screen is the projector: hide every control while patterns are shown.
     document.body.classList.add('sweeping');
     try {
-      this.sweep = await runSweep(this.cam, (f) => this.hooks.setFrame(f), (s) => this.say(s));
+      this.scan = await runScan(this.cam, (f) => this.hooks.setFrame(f), (s) => this.say(s));
     } finally {
       document.body.classList.remove('sweeping');
       this.hooks.setFrame(null);
     }
     this.el.classList.add('lit');
     this.redrawPic();
-    const r = this.sweep;
-    this.hooks.log('info', `sweep: ${r.dotsSeen}/${r.dotsTotal} dots used, fit error ${r.rms.toFixed(1)} px`);
-    this.say(`${r.dotsSeen}/${r.dotsTotal} dots found. 3: tap the middle of the mask in the picture.`);
+    const r = this.scan;
+    this.hooks.log('info', `scan: ${r.validCount} of ${r.width * r.height} camera pixels decoded`);
+    this.say(`scan done (${Math.round((100 * r.validCount) / (r.width * r.height))}% of the picture decoded). 3: tap the middle of the mask in the picture.`);
   }
 
   private picScale(): number {
@@ -170,7 +171,7 @@ export class CalibrationUI {
   }
 
   private redrawPic(region: Region | null = null): void {
-    if (!this.sweep || !this.cam) return;
+    if (!this.scan || !this.cam) return;
     const w = this.cam.width, h = this.cam.height;
     const cssW = Math.min(this.el.clientWidth - 24, 480);
     this.pic.width = Math.round(cssW);
@@ -179,7 +180,7 @@ export class CalibrationUI {
     const tmp = document.createElement('canvas');
     tmp.width = w;
     tmp.height = h;
-    tmp.getContext('2d')!.putImageData(this.sweep.lit, 0, 0);
+    tmp.getContext('2d')!.putImageData(this.scan.lit, 0, 0);
     g.imageSmoothingEnabled = true;
     g.drawImage(tmp, 0, 0, this.pic.width, this.pic.height);
     if (region) {
@@ -200,53 +201,32 @@ export class CalibrationUI {
   private region: Region | null = null;
 
   private async onTap(e: PointerEvent): Promise<void> {
-    if (!this.sweep || this.busy) return;
+    if (!this.scan || this.busy) return;
     const r = this.pic.getBoundingClientRect();
     const s = this.picScale() * (r.width / this.pic.width);
     this.lastTap = [(e.clientX - r.left) / s, (e.clientY - r.top) / s];
-    await this.placeFromTap(true);
+    this.placeFromTap();
   }
 
-  /** Find the mask at the last tap; on a new tap also run the refined sweep inside it. */
-  private async placeFromTap(refine: boolean): Promise<void> {
-    if (!this.sweep || !this.lastTap || !this.cam) return;
-    this.busy = true;
+  /** Find the mask at the last tap and place the face on it (instant: the scan already coded every pixel). */
+  private placeFromTap(): void {
+    if (!this.scan || !this.lastTap) return;
     try {
-      this.region = findMask(this.sweep, this.lastTap, Number(this.tolInput.value));
+      this.region = findMask(this.scan, this.lastTap, Number(this.tolInput.value));
       this.redrawPic(this.region);
-      if (refine) {
-        this.say('mask found. Sweeping dots on the mask only, keep still…');
-        this.hooks.setFrame({ kind: 'black' });
-        document.body.classList.add('sweeping');
-        try {
-          this.sweep = await refineSweep(this.cam, (f) => this.hooks.setFrame(f), (s) => this.say(s), this.sweep, this.region);
-        } finally {
-          document.body.classList.remove('sweeping');
-          this.hooks.setFrame(null);
-        }
-        const r = this.sweep;
-        this.hooks.log('info', r.refined ? `refined on the mask: ${r.dotsSeen}/${r.dotsTotal} dots, fit error ${r.rms.toFixed(1)} px` : 'refine failed; using the coarse mapping');
-      }
       const { W, H } = this.hooks.outputSize();
-      this.placement = placeFace(this.sweep, this.region, W, H);
-      const problem = pinProblem(this.placement.cornerPin);
-      const b = this.region.bbox;
-      if (problem) {
-        this.say(`${problem}. Retry the sweep with the phone closer to the projector's line of sight.`, true);
-        this.hooks.log('err', `calibration: ${problem}; pin ${JSON.stringify(this.placement.cornerPin.map((p) => p.map((v) => +v.toFixed(2))))}`);
-        this.placement = null;
-        this.btn.accept.disabled = true;
-        return;
-      }
+      this.placement = placeFace(this.scan, this.region, W, H);
+      const p = this.placement, b = this.region.bbox;
+      this.hooks.log('info', `mask ${b.x1 - b.x0}×${b.y1 - b.y0} px, ${p.coded} coded pixels, axis fit ${p.axisFit.toFixed(2)}, flip ${p.flipH ? 'H' : '-'}${p.flipV ? 'V' : '-'}, pin ${JSON.stringify(p.cornerPin.map((q) => q.map((v) => +v.toFixed(3))))}`);
       this.btn.accept.disabled = false;
-      this.say(`mask ${b.x1 - b.x0}×${b.y1 - b.y0} px in camera${this.sweep.refined ? ', mapped from dots on the mask' : ' (coarse mapping only)'}. Check the projection, then Accept.`);
+      this.say(`mask found (${p.coded} coded pixels${p.axisFit < 0.6 ? ', weak scan: check the result carefully' : ''}). Look at the projection, adjust the tolerance if the outline is wrong, then Accept.`);
       this.preview();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.say(msg, true);
       this.hooks.log('err', `calibration: ${msg}`);
-    } finally {
-      this.busy = false;
+      this.placement = null;
+      this.btn.accept.disabled = true;
     }
   }
 
@@ -259,6 +239,8 @@ export class CalibrationUI {
     }
     const m = this.store.cfg.mapping;
     assignDeep(m.transform, defaultConfig().mapping.transform);
+    m.transform.flipH = this.placement.flipH;
+    m.transform.flipV = this.placement.flipV;
     m.cornerPin = this.placement.cornerPin.map(([x, y]) => [x, y]);
     const e = this.placement.ellipse;
     Object.assign(m.ellipseMask, { enabled: true, cx: e.cx, cy: e.cy, rx: e.rx, ry: e.ry, feather: Math.max(m.ellipseMask.feather, 0.08) });
@@ -285,9 +267,9 @@ export class CalibrationUI {
     this.say('reverted to the previous mapping.');
   }
 
-  /** Tolerance slider: re-grow the mask with the current mapping, no new sweep. */
+  /** Tolerance slider: re-grow the mask and place again. */
   retune(): void {
-    void this.placeFromTap(false);
+    this.placeFromTap();
   }
 
   destroy(): void {

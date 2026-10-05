@@ -98,6 +98,17 @@ export class OutputStage {
       ctx.beginPath();
       ctx.arc(f.u * W, f.v * H, r, 0, Math.PI * 2);
       ctx.fill();
+    } else if (f.kind === 'stripes') {
+      const n = 1 << f.bits;
+      const shift = f.bits - 1 - f.bit;
+      const size = (f.axis === 'x' ? W : H) / n;
+      ctx.fillStyle = '#fff';
+      for (let i = 0; i < n; i++) {
+        const on = (((i ^ (i >> 1)) >> shift) & 1) === 1;
+        if (on === f.inverse) continue;
+        if (f.axis === 'x') ctx.fillRect(i * size, 0, size + 0.5, H);
+        else ctx.fillRect(0, i * size, W, size + 0.5);
+      }
     }
     ctx.restore();
     this.applyCornerPin([[0, 0], [1, 0], [1, 1], [0, 1]]);
