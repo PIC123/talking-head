@@ -11,6 +11,8 @@ export interface CalibrationHooks {
   outputSize: () => { W: number; H: number };
   log: (kind: 'info' | 'err', text: string) => void;
   onToggleEdit: () => void;
+  /** Re-enter fullscreen (the camera permission prompt throws the browser out of it). */
+  ensureFullscreen: () => Promise<void>;
 }
 
 /**
@@ -94,6 +96,9 @@ export class CalibrationUI {
 
   private async act(what: string): Promise<void> {
     if (this.busy) return;
+    // Every button tap is a user gesture: use it to get back into fullscreen, which the camera
+    // permission prompt (and some phones' tab switches) drop us out of.
+    if (what !== 'close') void this.hooks.ensureFullscreen();
     try {
       switch (what) {
         case 'close':
@@ -135,6 +140,9 @@ export class CalibrationUI {
     this.say('opening camera…');
     this.cam = this.cam ?? new CameraFeed(this.video);
     await this.cam.open();
+    // The permission prompt exits fullscreen; the gesture that opened the camera is usually still
+    // fresh enough to re-enter. The next button tap does it for sure.
+    await this.hooks.ensureFullscreen();
     this.el.classList.add('live');
     this.btn.sweep.disabled = false;
     this.say(`camera: ${this.cam.label || 'ready'}. Frame the whole mask, keep the phone still, then Scan.`);

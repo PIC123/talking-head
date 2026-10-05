@@ -7,7 +7,7 @@ import { OutputStage } from './mapping/output';
 import { MappingEditor, type Stage } from './mapping/editor';
 import { createLog } from './ui/log';
 import { createPanel } from './ui/panel';
-import { keepAwake, requestFullscreen, showStartOverlay } from './ui/start';
+import { ensureFullscreen, keepAwake, requestFullscreen, showStartOverlay } from './ui/start';
 import { Underlay } from './ui/underlay';
 import { Sync } from './sync';
 import { copyLog, runDiagnostics } from './ui/diagnostics';
@@ -115,6 +115,7 @@ function toggleCalibration(): void {
     outputSize: () => ({ W: out.width, H: out.height }),
     log,
     onToggleEdit: () => setEditMode(!editMode),
+    ensureFullscreen: () => (params.has('windowed') ? Promise.resolve() : ensureFullscreen()),
   });
   cal.toggle();
 }

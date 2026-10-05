@@ -42,6 +42,16 @@ export async function requestFullscreen(): Promise<void> {
   }
 }
 
+/** Enter fullscreen if not already in it (never toggles out). Needs a user gesture on most browsers. */
+export async function ensureFullscreen(): Promise<void> {
+  if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+  try {
+    await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+  } catch {
+    /* no gesture or unsupported (iOS); ignore */
+  }
+}
+
 /** Keep the display awake for the whole show; re-acquire after tab visibility changes. */
 export function keepAwake(): void {
   let lock: WakeLockSentinel | null = null;
