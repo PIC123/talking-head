@@ -43,12 +43,12 @@ export class CalibrationUI {
         <button data-act="camera">1 Camera on</button>
         <button data-act="sweep" disabled>2 Scan</button>
       </div>
-      <div class="cal-pic"><video id="cal-video" playsinline muted></video><canvas id="cal-pic"></canvas></div>
-      <label class="cal-tol">mask colour tolerance <input id="cal-tol" type="range" min="25" max="140" value="60"></label>
       <div class="cal-row">
         <button data-act="accept" disabled>4 Accept</button>
         <button data-act="undo" disabled>Undo</button>
       </div>
+      <div class="cal-pic"><video id="cal-video" playsinline muted></video><canvas id="cal-pic"></canvas></div>
+      <label class="cal-tol">mask colour tolerance <input id="cal-tol" type="range" min="25" max="140" value="60"></label>
       <div class="cal-row cal-minor">
         <button data-act="edit">Edit panel</button>
         <button data-act="hide">Hide menu</button>
@@ -62,10 +62,19 @@ export class CalibrationUI {
       b.addEventListener('click', () => void this.act(b.dataset.act!));
     }
     this.el.querySelector('.cal-x')!.addEventListener('click', () => this.hide());
+    // A short, still touch on the picture is a tap; a drag scrolls the menu (touch-action: pan-y).
+    let down: { x: number; y: number; t: number } | null = null;
     this.pic.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      void this.onTap(e);
+      down = { x: e.clientX, y: e.clientY, t: performance.now() };
     });
+    this.pic.addEventListener('pointerup', (e) => {
+      e.stopPropagation();
+      const d = down;
+      down = null;
+      if (d && performance.now() - d.t < 600 && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 12) void this.onTap(e);
+    });
+    this.pic.addEventListener('pointercancel', () => (down = null));
     this.tolInput.addEventListener('change', () => this.retune());
     document.getElementById('stage')!.appendChild(this.el);
   }
