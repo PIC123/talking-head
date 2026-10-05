@@ -24,11 +24,16 @@ export class CameraFeed {
 
   async open(): Promise<void> {
     if (this.stream) return;
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('camera API unavailable: the page must be https (or localhost) and opened in a real browser tab');
     const tryGet = (c: MediaStreamConstraints) => navigator.mediaDevices.getUserMedia(c);
     try {
       this.stream = await tryGet({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
-    } catch {
-      this.stream = await tryGet({ video: true, audio: false });
+    } catch (first) {
+      try {
+        this.stream = await tryGet({ video: true, audio: false });
+      } catch (e) {
+        throw new Error(cameraHint(e instanceof Error ? e : (first as Error)));
+      }
     }
     this.video.srcObject = this.stream;
     this.video.muted = true;
@@ -106,6 +111,26 @@ export class CameraFeed {
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     this.video.srcObject = null;
+  }
+}
+
+/** A readable reason, with the fix, for a getUserMedia failure. */
+export function cameraHint(e: Error): string {
+  const name = e.name || 'Error';
+  switch (name) {
+    case 'NotAllowedError':
+    case 'PermissionDeniedError':
+    case 'SecurityError':
+      return `camera blocked (${name}). Tap the lock/tune icon left of the address bar → Permissions → Camera → Allow, then reload this page.`;
+    case 'NotFoundError':
+    case 'DevicesNotFoundError':
+      return `no camera found (${name}).`;
+    case 'NotReadableError':
+    case 'TrackStartError':
+    case 'AbortError':
+      return `camera is busy or failed to start (${name}: ${e.message}). Close other apps using the camera and retry.`;
+    default:
+      return `camera failed: ${name}: ${e.message}`;
   }
 }
 

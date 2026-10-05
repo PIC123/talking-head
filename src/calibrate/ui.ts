@@ -17,6 +17,8 @@ export interface CalibrationHooks {
   forceFullscreen: () => Promise<string>;
   /** Share / copy / download the log; resolves to a status line. */
   shareLog: () => Promise<string>;
+  /** The log as text, for the in-menu viewer. */
+  logText: () => string;
 }
 
 /**
@@ -61,8 +63,10 @@ export class CalibrationUI {
         <button data-act="fullscreen">Fullscreen</button>
         <button data-act="edit">Edit panel</button>
         <button data-act="log">Share log</button>
+        <button data-act="showlog">Show log</button>
         <button data-act="hide">Hide menu</button>
-      </div>`;
+      </div>
+      <textarea id="cal-log" readonly spellcheck="false" hidden></textarea>`;
     this.video = this.el.querySelector('#cal-video')!;
     this.pic = this.el.querySelector('#cal-pic')!;
     this.status = this.el.querySelector('#cal-status')!;
@@ -124,6 +128,21 @@ export class CalibrationUI {
   private say(text: string, err = false): void {
     this.status.textContent = text;
     this.status.classList.toggle('err', err);
+    this.refreshLogView();
+  }
+
+  /** The log inside the menu, selectable and screenshot-able, for phones where share and clipboard fail. */
+  private toggleLogView(): void {
+    const ta = this.el.querySelector<HTMLTextAreaElement>('#cal-log')!;
+    ta.hidden = !ta.hidden;
+    this.refreshLogView();
+  }
+
+  private refreshLogView(): void {
+    const ta = this.el.querySelector<HTMLTextAreaElement>('#cal-log')!;
+    if (ta.hidden) return;
+    ta.value = this.hooks.logText();
+    ta.scrollTop = ta.scrollHeight;
   }
 
   private async act(what: string): Promise<void> {
@@ -164,6 +183,9 @@ export class CalibrationUI {
         case 'log':
           this.say(await this.hooks.shareLog());
           break;
+        case 'showlog':
+          this.toggleLogView();
+          break;
         case 'hide':
           this.hide();
           this.hooks.log('info', 'menu hidden; tap the top-right corner (or press C) to bring it back');
@@ -184,7 +206,12 @@ export class CalibrationUI {
     this.busy = true;
     this.say('opening camera…');
     this.cam = this.cam ?? new CameraFeed(this.video);
-    await this.cam.open();
+    try {
+      await this.cam.open();
+    } catch (e) {
+      this.hooks.log('err', `camera: ${e instanceof Error ? e.message : String(e)}`);
+      throw e;
+    }
     // The permission prompt exits fullscreen; the gesture that opened the camera is usually still
     // fresh enough to re-enter. The next button tap does it for sure.
     await this.hooks.ensureFullscreen();

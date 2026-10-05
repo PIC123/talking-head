@@ -10,7 +10,7 @@ import { createPanel } from './ui/panel';
 import { ensureFullscreen, forceFullscreen, keepAwake, requestFullscreen, showStartOverlay } from './ui/start';
 import { Underlay } from './ui/underlay';
 import { Sync } from './sync';
-import { copyLog, runDiagnostics, shareLog } from './ui/diagnostics';
+import { copyLog, logText, runDiagnostics, shareLog } from './ui/diagnostics';
 import personaMd from '../config/persona.md?raw';
 import { CalibrationUI } from './calibrate/ui';
 import type { CalFrame } from './calibrate/sweep';
@@ -118,6 +118,7 @@ function toggleCalibration(): void {
     ensureFullscreen: () => (params.has('windowed') ? Promise.resolve() : ensureFullscreen((t) => log('info', t))),
     forceFullscreen: () => (params.has('windowed') ? Promise.resolve('windowed mode (?windowed)') : forceFullscreen((t) => log('info', t))),
     shareLog: () => shareLog(logEl),
+    logText: () => logText(logEl),
   });
   cal.toggle();
   (window as unknown as { th: { cal: unknown } }).th.cal = cal;
