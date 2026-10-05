@@ -15,6 +15,8 @@ export interface CalibrationHooks {
   ensureFullscreen: () => Promise<void>;
   /** Exit-and-re-enter fullscreen; resolves to a status line for the menu. */
   forceFullscreen: () => Promise<string>;
+  /** Share / copy / download the log; resolves to a status line. */
+  shareLog: () => Promise<string>;
 }
 
 /**
@@ -58,6 +60,7 @@ export class CalibrationUI {
       <div class="cal-row cal-minor">
         <button data-act="fullscreen">Fullscreen</button>
         <button data-act="edit">Edit panel</button>
+        <button data-act="log">Share log</button>
         <button data-act="hide">Hide menu</button>
       </div>`;
     this.video = this.el.querySelector('#cal-video')!;
@@ -157,6 +160,9 @@ export class CalibrationUI {
         }
         case 'edit':
           this.hooks.onToggleEdit();
+          break;
+        case 'log':
+          this.say(await this.hooks.shareLog());
           break;
         case 'hide':
           this.hide();

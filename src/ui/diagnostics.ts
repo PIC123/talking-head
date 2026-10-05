@@ -118,8 +118,13 @@ function tokenHint(status: number): string {
 }
 
 /** Copy the log panel to the clipboard, with a fallback for browsers that block clipboard writes. */
+/** The log as plain text, one line per entry, even while the log element is hidden. */
+export function logText(el: HTMLElement): string {
+  return el.children.length ? Array.from(el.children).map((c) => c.textContent ?? '').join('\n') : el.innerText;
+}
+
 export async function copyLog(el: HTMLElement): Promise<boolean> {
-  const text = el.innerText;
+  const text = logText(el);
   try {
     await navigator.clipboard.writeText(text);
     return true;
@@ -146,4 +151,28 @@ export function micErrorKind(e: unknown): 'denied' | 'missing' | null {
   if (/NotAllowedError|PermissionDeniedError|SecurityError/.test(name) || /permission denied|not allowed by the user agent|denied permission/i.test(msg)) return 'denied';
   if (/NotFoundError|NotReadableError|OverconstrainedError|DevicesNotFoundError/.test(name) || /requested device not found|could not start audio source/i.test(msg)) return 'missing';
   return null;
+}
+
+/**
+ * Get the log off the device: the share sheet on phones, else the clipboard, else a download.
+ * Resolves to a short line saying which worked.
+ */
+export async function shareLog(el: HTMLElement): Promise<string> {
+  const text = logText(el);
+  const name = `talking-head-log-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`;
+  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+  if (nav.share) {
+    try {
+      const file = new File([text], name, { type: 'text/plain' });
+      if (nav.canShare?.({ files: [file] })) await nav.share({ files: [file], title: 'Talking Head log' });
+      else await nav.share({ title: 'Talking Head log', text });
+      return 'log shared';
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return 'share cancelled';
+    }
+  }
+  if (await copyLog(el)) return 'log copied to the clipboard';
+  const { downloadText } = await import('../config/store');
+  downloadText(name, text);
+  return `log downloaded as ${name}`;
 }
