@@ -82,7 +82,8 @@
       }
       body.control #banner { display: block; }
       /* Auto-calibration menu (phone mirrored to the projector) and the near-invisible hotspot that restores it. */
-      #hot { position: absolute; top: 0; right: 0; width: 72px; height: 72px; z-index: 30; opacity: 0.03; background: #fff; border-radius: 0 0 0 12px; touch-action: none; }
+      /* Invisible strip across the top 15% of the screen (the zone where a touch never starts a turn): a tap there opens the menu. Sits below the phone's status bar, which eats taps at the very top edge. */
+      #hot { position: absolute; top: 0; left: 0; right: 0; height: 15vh; z-index: 30; opacity: 0; touch-action: none; }
       body.control #hot, body.debug #hot, body.edit #hot, body.cal #hot { display: none; }
       #cal {
         position: absolute; left: 8px; right: 8px; top: 8px; z-index: 25; display: none; max-height: calc(100vh - 16px); overflow: auto;

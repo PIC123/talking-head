@@ -118,13 +118,26 @@ function toggleCalibration(): void {
   });
   cal.toggle();
 }
-// The hotspot acts on the touch itself (not a synthesized click) so it wins over touch-to-talk.
+// The hotspot strip toggles the menu on a short tap (pointer events, not a synthesized click, so a
+// phone's touch handling cannot swallow it). A drag or a long hold does nothing.
 const hot = document.getElementById('hot')!;
+let hotDown: { x: number; y: number; t: number } | null = null;
 hot.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   e.stopPropagation();
-  toggleCalibration();
+  hotDown = { x: e.clientX, y: e.clientY, t: performance.now() };
 });
+hot.addEventListener('pointerup', (e) => {
+  e.stopPropagation();
+  if (!hotDown) return;
+  const tap = performance.now() - hotDown.t < 700 && Math.hypot(e.clientX - hotDown.x, e.clientY - hotDown.y) < 24;
+  hotDown = null;
+  if (tap) {
+    log('info', 'top-strip tap: calibration menu');
+    toggleCalibration();
+  }
+});
+hot.addEventListener('pointercancel', () => (hotDown = null));
 hot.addEventListener('click', (e) => e.stopPropagation());
 
 /** Once a control tab is driving, keep the panel off the projection; handles and HUD still show. */
@@ -363,8 +376,8 @@ window.addEventListener('blur', () => {
 // Pointer-based talk: hold the right mouse button (presenter clicker), or on a touch screen
 // hold a finger anywhere in show mode. Edit mode keeps touch free for the panel and handles.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
-// The top strip of the screen is reserved for the menu hotspot (and, on phones, the browser bar),
-// so a finger there never starts a turn.
+// The top strip of the screen is the menu hotspot (and, on phones, under the status bar), so a
+// finger there never starts a turn.
 const TALK_DEAD_TOP = 0.15;
 const isTouchTalk = (e: PointerEvent) =>
   e.pointerType === 'touch' &&
