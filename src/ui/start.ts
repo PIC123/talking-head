@@ -64,16 +64,21 @@ export function looksFullscreen(): boolean {
 export async function forceFullscreen(log?: (text: string) => void): Promise<string> {
   const el = document.documentElement;
   if (typeof el.requestFullscreen !== 'function') return 'fullscreen not available in this browser (iPhone: add the page to the home screen)';
+  const before = `enabled=${document.fullscreenEnabled} element=${document.fullscreenElement?.tagName ?? 'none'} viewport=${window.innerWidth}×${window.innerHeight} screen=${screen.width}×${screen.height} activation=${(navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive ?? '?'}`;
+  log?.(`fullscreen request: ${before}`);
   try {
-    if (document.fullscreenElement) await document.exitFullscreen();
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      await new Promise((r) => setTimeout(r, 150));
+    }
     await el.requestFullscreen({ navigationUI: 'hide' });
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 400));
     const ok = looksFullscreen();
-    const line = `fullscreen ${ok ? 'on' : 'requested, but the viewport is still'} ${window.innerWidth}×${window.innerHeight} of ${screen.width}×${screen.height}`;
+    const line = `fullscreen ${ok ? 'on' : 'granted but the viewport is still'} ${window.innerWidth}×${window.innerHeight} of ${screen.width}×${screen.height} (element=${document.fullscreenElement?.tagName ?? 'none'})`;
     log?.(line);
     return line;
   } catch (e) {
-    const line = `fullscreen refused: ${e instanceof Error ? e.message : String(e)}`;
+    const line = `fullscreen refused: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)} (${before})`;
     log?.(line);
     return line;
   }

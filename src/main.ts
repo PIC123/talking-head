@@ -445,6 +445,8 @@ function frame(now: number): void {
 
 // ---------------- Boot
 window.addEventListener('error', (e) => log('err', `uncaught: ${e.message}`));
+document.addEventListener('fullscreenerror', () => log('err', `fullscreenerror event (enabled=${document.fullscreenEnabled})`));
+document.addEventListener('fullscreenchange', () => log('info', `fullscreen ${document.fullscreenElement ? 'entered' : 'exited'}: viewport ${window.innerWidth}×${window.innerHeight}`));
 window.addEventListener('unhandledrejection', (e) => log('err', `unhandled: ${String(e.reason)}`));
 
 if (isDebug) {

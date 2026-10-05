@@ -310,7 +310,7 @@ export class CalibrationUI {
       this.placement = placeFace(this.scan, this.region, W, H, Number(this.sizeInput.value) / 100);
       const p = this.placement, b = this.region.bbox;
       const pct = (v: number) => `${Math.round(v * 100)}%`;
-      this.hooks.log('info', `mask ${b.x1 - b.x0}×${b.y1 - b.y0} px in camera (${p.coded} coded), in projector frame x ${pct(p.rect.x0)}–${pct(p.rect.x1)} y ${pct(p.rect.y0)}–${pct(p.rect.y1)}, axis fit ${p.axisFit.toFixed(2)}, flip ${p.flipH ? 'H' : '-'}${p.flipV ? 'V' : '-'}, pin ${JSON.stringify(p.cornerPin.map((q) => q.map((v) => +v.toFixed(3))))}`);
+      this.hooks.log('info', `mask ${b.x1 - b.x0}×${b.y1 - b.y0} px in camera (${p.coded} coded), in projector frame x ${pct(p.rect.x0)}–${pct(p.rect.x1)} y ${pct(p.rect.y0)}–${pct(p.rect.y1)} (coded-only x ${pct(p.rectCoded.x0)}–${pct(p.rectCoded.x1)} y ${pct(p.rectCoded.y0)}–${pct(p.rectCoded.y1)}, fit err ${(p.fitErr * 100).toFixed(2)}%), axis fit ${p.axisFit.toFixed(2)}, flip ${p.flipH ? 'H' : '-'}${p.flipV ? 'V' : '-'}, viewport ${W}×${H} fullscreen=${!!document.fullscreenElement}, pin ${JSON.stringify(p.cornerPin.map((q) => q.map((v) => +v.toFixed(3))))}`);
       this.btn.accept.disabled = false;
       this.say(`mask found: ${Math.round((p.rect.x1 - p.rect.x0) * 100)}% × ${Math.round((p.rect.y1 - p.rect.y0) * 100)}% of the projector frame (${p.coded} coded pixels${p.axisFit < 0.6 ? ', weak scan' : ''}). Check the projection, adjust the tolerance if the outline is wrong, then Accept.`);
       this.preview();

@@ -1,4 +1,4 @@
-import type { P } from './math';
+import { type P, type Mat3, apply, fitHomography } from './math';
 import { regionGrow, type Region } from './detect';
 import { CameraFeed, sleep } from './camera';
 
@@ -32,8 +32,12 @@ export interface Placement {
   coded: number;
   /** |correlation| between camera axes and projector axes; low values mean a rotated or noisy scan. */
   axisFit: number;
-  /** Where the mask sits in the projector frame (normalised). */
+  /** Where the mask sits in the projector frame (normalised), from the colour outline mapped through the fit. */
   rect: { x0: number; y0: number; x1: number; y1: number };
+  /** Same, measured only from the coded pixels (for the log; smaller when edges did not decode). */
+  rectCoded: { x0: number; y0: number; x1: number; y1: number };
+  /** Residual of the camera-to-projector fit over the mask, in projector-frame units (1 = whole frame). */
+  fitErr: number;
 }
 
 /**
@@ -150,6 +154,49 @@ function corr(xs: Float32Array, ys: Float32Array): number {
  * is handled. Assumes the projector faces the mask roughly square-on, which the rig does; the
  * camera can be anywhere it sees the mask.
  */
+/** Fit camera px -> projector normalised over the given pairs, trimming outliers in two rounds. */
+function fitCamToProj(xs: number[], ys: number[], us: number[], vs: number[]): { H: Mat3; err: number } | null {
+  let idx = xs.map((_, i) => i);
+  // Subsample evenly to keep the normal equations cheap.
+  const step = Math.max(1, Math.floor(idx.length / 1200));
+  idx = idx.filter((_, i) => i % step === 0);
+  let H: Mat3 | null = null, err = 0;
+  for (let round = 0; round < 3; round++) {
+    H = fitHomography(idx.map((i) => [xs[i], ys[i]] as P), idx.map((i) => [us[i], vs[i]] as P));
+    if (!H) return null;
+    const res = idx.map((i) => { const [u, v] = apply(H!, [xs[i], ys[i]]); return Math.hypot(u - us[i], v - vs[i]); });
+    const sorted = Float32Array.from(res).sort();
+    const med = sorted[Math.floor(sorted.length / 2)];
+    err = Math.sqrt(res.reduce((a, r) => a + r * r, 0) / res.length);
+    const tol = Math.max(3 * med, 0.5 / (1 << BITS));
+    const keep = idx.filter((_, k) => res[k] <= tol);
+    if (keep.length === idx.length || keep.length < 50) break;
+    idx = keep;
+  }
+  return H ? { H, err } : null;
+}
+
+/** Pixels of the region that touch a pixel outside it (its silhouette). */
+function outline(region: Region, w: number, h: number): P[] {
+  const m = region.mask, pts: P[] = [];
+  const b = region.bbox;
+  for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) {
+    const k = y * w + x;
+    if (!m[k]) continue;
+    if (x === 0 || y === 0 || x === w - 1 || y === h - 1 || !m[k - 1] || !m[k + 1] || !m[k - w] || !m[k + w]) pts.push([x, y]);
+  }
+  return pts;
+}
+
+/**
+ * Where the mask sits in the projector's frame. The structured-light codes inside the tapped region
+ * give a camera-to-projector mapping for the mask's surface (a homography fitted to thousands of
+ * pixels); the colour outline of the region, mapped through it, gives the extent. Coded pixels alone
+ * under-estimate the extent because the mask's curved edges decode worst and get dropped. Flips come
+ * from the sign of the camera-to-projector correlation, so a mirror fold or an inverted mount is
+ * handled. Assumes the projector faces the mask roughly square-on, which the rig does; the camera can
+ * be anywhere it sees the mask.
+ */
 export function placeFace(scan: ScanResult, region: Region, W: number, H: number, size = 1): Placement {
   const us: number[] = [], vs: number[] = [], xs: number[] = [], ys: number[] = [];
   const w = scan.width;
@@ -160,11 +207,24 @@ export function placeFace(scan: ScanResult, region: Region, W: number, H: number
   if (us.length < 100) throw new Error(`only ${us.length} coded pixels on the mask. Is the mask lit by the projector? Dim the room and retry.`);
   const U = Float32Array.from(us).sort(), V = Float32Array.from(vs).sort();
   const pad = 0.5 / (1 << BITS);
-  const rect = { x0: percentile(U, 0.02) - pad, x1: percentile(U, 0.98) + pad, y0: percentile(V, 0.02) - pad, y1: percentile(V, 0.98) + pad };
+  const rectCoded = { x0: percentile(U, 0.02) - pad, x1: percentile(U, 0.98) + pad, y0: percentile(V, 0.02) - pad, y1: percentile(V, 0.98) + pad };
+  // Mapping over the mask surface, then the colour outline through it.
+  const fit = fitCamToProj(xs, ys, us, vs);
+  let rect = { ...rectCoded }, fitErr = NaN;
+  if (fit) {
+    const mapped = outline(region, w, scan.height).map((p) => apply(fit.H, p));
+    const OU = Float32Array.from(mapped.map((p) => p[0])).sort(), OV = Float32Array.from(mapped.map((p) => p[1])).sort();
+    const cand = { x0: percentile(OU, 0.01), x1: percentile(OU, 0.99), y0: percentile(OV, 0.01), y1: percentile(OV, 0.99) };
+    // Accept the outline-based extent when the fit is sane: small residual and an extent that
+    // contains (roughly) the coded one and is not wildly larger.
+    const sane = fit.err < 0.03 && cand.x1 - cand.x0 < 2 * (rectCoded.x1 - rectCoded.x0) + 0.05 && cand.y1 - cand.y0 < 2 * (rectCoded.y1 - rectCoded.y0) + 0.05;
+    if (sane) rect = cand;
+    fitErr = fit.err;
+  }
   // Optional manual size trim, about the mask centre.
   if (size !== 1) {
     const cx = (rect.x0 + rect.x1) / 2, cy = (rect.y0 + rect.y1) / 2, hw = ((rect.x1 - rect.x0) / 2) * size, hh = ((rect.y1 - rect.y0) / 2) * size;
-    rect.x0 = cx - hw; rect.x1 = cx + hw; rect.y0 = cy - hh; rect.y1 = cy + hh;
+    rect = { x0: cx - hw, x1: cx + hw, y0: cy - hh, y1: cy + hh };
   }
   const cxu = corr(Float32Array.from(xs), Float32Array.from(us)), cyv = corr(Float32Array.from(ys), Float32Array.from(vs));
   const cxv = corr(Float32Array.from(xs), Float32Array.from(vs)), cyu = corr(Float32Array.from(ys), Float32Array.from(us));
@@ -189,5 +249,5 @@ export function placeFace(scan: ScanResult, region: Region, W: number, H: number
     rx: ((box.x1 - box.x0) / 2) * 1.12,
     ry: ((box.y1 - box.y0) / 2) * 1.08,
   };
-  return { cornerPin, ellipse, flipH, flipV, coded: us.length, axisFit, rect };
+  return { cornerPin, ellipse, flipH, flipV, coded: us.length, axisFit, rect, rectCoded, fitErr };
 }
