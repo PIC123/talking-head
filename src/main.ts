@@ -118,6 +118,7 @@ function toggleCalibration(): void {
     ensureFullscreen: () => (params.has('windowed') ? Promise.resolve() : ensureFullscreen()),
   });
   cal.toggle();
+  (window as unknown as { th: { cal: unknown } }).th.cal = cal;
 }
 // The hotspot strip toggles the menu on a short tap (pointer events, not a synthesized click, so a
 // phone's touch handling cannot swallow it). A drag or a long hold does nothing.

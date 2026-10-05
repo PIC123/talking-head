@@ -50,6 +50,7 @@ export class CalibrationUI {
       <div class="cal-pic"><video id="cal-video" playsinline muted></video><canvas id="cal-pic"></canvas></div>
       <label class="cal-tol">mask colour tolerance <input id="cal-tol" type="range" min="25" max="140" value="60"></label>
       <div class="cal-row cal-minor">
+        <button data-act="fullscreen">Fullscreen</button>
         <button data-act="edit">Edit panel</button>
         <button data-act="hide">Hide menu</button>
       </div>`;
@@ -79,8 +80,9 @@ export class CalibrationUI {
     // Outside #stage: the stage disables touch gestures for push-to-talk, and that setting also
     // applies to everything inside it, which would make this menu impossible to scroll on a phone.
     document.body.appendChild(this.el);
-    // Any touch in the menu is a user gesture: use it to get back into fullscreen if it was lost.
-    this.el.addEventListener('pointerdown', (e) => {
+    // Any completed tap in the menu is a user gesture: use it to get back into fullscreen if it was
+    // lost. (On touch screens only click/pointerup count as activation, not pointerdown.)
+    this.el.addEventListener('click', (e) => {
       if (!(e.target as HTMLElement).closest('.cal-x')) void this.hooks.ensureFullscreen();
     }, { capture: true });
   }
@@ -135,6 +137,9 @@ export class CalibrationUI {
           break;
         case 'undo':
           this.undo();
+          break;
+        case 'fullscreen':
+          this.say(document.fullscreenElement ? 'fullscreen' : 'fullscreen not available here (iPhone: add the page to the home screen)');
           break;
         case 'edit':
           this.hooks.onToggleEdit();
@@ -202,9 +207,12 @@ export class CalibrationUI {
   private redrawPic(region: Region | null = null): void {
     if (!this.scan || !this.cam) return;
     const w = this.cam.width, h = this.cam.height;
-    const cssW = Math.min(this.el.clientWidth - 24, 480);
+    const boxW = this.pic.parentElement!.clientWidth || this.el.clientWidth - 24;
+    const cssW = Math.max(120, Math.min(boxW, 480, (window.innerHeight * 0.42 * w) / h));
     this.pic.width = Math.round(cssW);
     this.pic.height = Math.round((cssW * h) / w);
+    this.pic.style.width = `${this.pic.width}px`;
+    this.pic.style.height = `${this.pic.height}px`;
     const g = this.pic.getContext('2d')!;
     const tmp = document.createElement('canvas');
     tmp.width = w;
@@ -226,7 +234,7 @@ export class CalibrationUI {
     }
   }
 
-  private lastTap: [number, number] | null = null;
+  lastTap: [number, number] | null = null;
   private region: Region | null = null;
 
   private async onTap(e: PointerEvent): Promise<void> {

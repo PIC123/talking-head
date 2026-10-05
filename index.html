@@ -102,10 +102,18 @@
       .cal-row button:disabled { opacity: 0.35; }
       .cal-minor button { padding: 8px; font-size: 13px; color: #aaa; }
       .cal-pic { position: relative; margin: 6px 0; }
-      #cal-video { display: none; width: 100%; max-height: 42vh; border-radius: 6px; background: #000; }
+      #cal-video { display: none; width: 100%; max-height: 42vh; object-fit: contain; border-radius: 6px; background: #000; }
       #cal.live #cal-video { display: block; }
       #cal.lit #cal-video { display: none; }
-      #cal-pic { display: none; width: 100%; max-height: 42vh; object-fit: contain; border-radius: 6px; touch-action: pan-y; }
+      #cal-pic { display: none; border-radius: 6px; touch-action: pan-y; }
+      /* Landscape phone: controls left, picture right, so nothing needs scrolling. */
+      @media (orientation: landscape) and (max-height: 600px) {
+        #cal { display: none; grid-template-columns: 1fr 1fr; column-gap: 12px; align-content: start; }
+        #cal.on { display: grid; }
+        .cal-head, .cal-status { grid-column: 1 / -1; }
+        .cal-row, .cal-tol { grid-column: 1; }
+        .cal-pic { grid-column: 2; grid-row: 3 / span 4; align-self: start; }
+      }
       #cal.lit #cal-pic { display: block; }
       .cal-tol { display: none; font-size: 12px; color: #aaa; }
       #cal.lit .cal-tol { display: flex; flex-direction: column; gap: 4px; }
