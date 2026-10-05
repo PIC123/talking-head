@@ -1,7 +1,7 @@
 import type { ConfigStore } from '../config/store';
 import type { MappingEditor } from '../mapping/editor';
 import { defaultConfig, assignDeep } from '../config/schema';
-import { CameraFeed } from './camera';
+import { CameraFeed, sleep } from './camera';
 import { runScan, findMask, placeFace, type CalFrame, type ScanResult, type Placement } from './sweep';
 import type { Region } from './detect';
 
@@ -76,7 +76,13 @@ export class CalibrationUI {
     });
     this.pic.addEventListener('pointercancel', () => (down = null));
     this.tolInput.addEventListener('change', () => this.retune());
-    document.getElementById('stage')!.appendChild(this.el);
+    // Outside #stage: the stage disables touch gestures for push-to-talk, and that setting also
+    // applies to everything inside it, which would make this menu impossible to scroll on a phone.
+    document.body.appendChild(this.el);
+    // Any touch in the menu is a user gesture: use it to get back into fullscreen if it was lost.
+    this.el.addEventListener('pointerdown', (e) => {
+      if (!(e.target as HTMLElement).closest('.cal-x')) void this.hooks.ensureFullscreen();
+    }, { capture: true });
   }
 
   get visible(): boolean {
@@ -106,8 +112,13 @@ export class CalibrationUI {
   private async act(what: string): Promise<void> {
     if (this.busy) return;
     // Every button tap is a user gesture: use it to get back into fullscreen, which the camera
-    // permission prompt (and some phones' tab switches) drop us out of.
-    if (what !== 'close') void this.hooks.ensureFullscreen();
+    // permission prompt (and some phones' tab switches) drop us out of. If that changes the
+    // viewport, let the resize settle first so the patterns are projected at the final size.
+    if (what !== 'close') {
+      const was = !!document.fullscreenElement;
+      await this.hooks.ensureFullscreen();
+      if (!was && document.fullscreenElement) await sleep(500);
+    }
     try {
       switch (what) {
         case 'close':
@@ -167,6 +178,7 @@ export class CalibrationUI {
     this.lastTap = null;
     this.btn.accept.disabled = true;
     this.el.classList.remove('lit');
+    if (!document.fullscreenElement && typeof document.documentElement.requestFullscreen === 'function') this.hooks.log('err', 'scanning while not fullscreen: the projection will shift if the page goes fullscreen later');
     this.say('scanning: keep the phone still…');
     // The phone screen is the projector: hide every control while patterns are shown.
     document.body.classList.add('sweeping');
