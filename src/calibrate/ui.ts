@@ -2,7 +2,7 @@ import type { ConfigStore } from '../config/store';
 import type { MappingEditor } from '../mapping/editor';
 import { defaultConfig, assignDeep } from '../config/schema';
 import { CameraFeed } from './camera';
-import { runSweep, placeFace, type CalFrame, type SweepResult, type Placement } from './sweep';
+import { runSweep, refineSweep, findMask, placeFace, pinProblem, type CalFrame, type SweepResult, type Placement } from './sweep';
 import type { Region } from './detect';
 
 export interface CalibrationHooks {
@@ -146,6 +146,8 @@ export class CalibrationUI {
     this.busy = true;
     this.sweep = null;
     this.placement = null;
+    this.region = null;
+    this.lastTap = null;
     this.btn.accept.disabled = true;
     this.say('sweeping: keep the phone still…');
     // The phone screen is the projector: hide every control while dots are shown.
@@ -195,25 +197,57 @@ export class CalibrationUI {
   }
 
   private lastTap: [number, number] | null = null;
+  private region: Region | null = null;
 
   private async onTap(e: PointerEvent): Promise<void> {
     if (!this.sweep || this.busy) return;
     const r = this.pic.getBoundingClientRect();
     const s = this.picScale() * (r.width / this.pic.width);
     this.lastTap = [(e.clientX - r.left) / s, (e.clientY - r.top) / s];
-    this.retune();
+    await this.placeFromTap(true);
   }
 
-  private place(): void {
-    if (!this.sweep || !this.lastTap) return;
-    const { W, H } = this.hooks.outputSize();
-    const { placement, region } = placeFace(this.sweep, this.lastTap, Number(this.tolInput.value), W, H);
-    this.placement = placement;
-    this.redrawPic(region);
-    this.btn.accept.disabled = false;
-    const b = region!.bbox;
-    this.say(`mask found (${b.x1 - b.x0}×${b.y1 - b.y0} px in camera). Adjust the tolerance if it spills, then Accept.`);
-    this.preview();
+  /** Find the mask at the last tap; on a new tap also run the refined sweep inside it. */
+  private async placeFromTap(refine: boolean): Promise<void> {
+    if (!this.sweep || !this.lastTap || !this.cam) return;
+    this.busy = true;
+    try {
+      this.region = findMask(this.sweep, this.lastTap, Number(this.tolInput.value));
+      this.redrawPic(this.region);
+      if (refine) {
+        this.say('mask found. Sweeping dots on the mask only, keep still…');
+        this.hooks.setFrame({ kind: 'black' });
+        document.body.classList.add('sweeping');
+        try {
+          this.sweep = await refineSweep(this.cam, (f) => this.hooks.setFrame(f), (s) => this.say(s), this.sweep, this.region);
+        } finally {
+          document.body.classList.remove('sweeping');
+          this.hooks.setFrame(null);
+        }
+        const r = this.sweep;
+        this.hooks.log('info', r.refined ? `refined on the mask: ${r.dotsSeen}/${r.dotsTotal} dots, fit error ${r.rms.toFixed(1)} px` : 'refine failed; using the coarse mapping');
+      }
+      const { W, H } = this.hooks.outputSize();
+      this.placement = placeFace(this.sweep, this.region, W, H);
+      const problem = pinProblem(this.placement.cornerPin);
+      const b = this.region.bbox;
+      if (problem) {
+        this.say(`${problem}. Retry the sweep with the phone closer to the projector's line of sight.`, true);
+        this.hooks.log('err', `calibration: ${problem}; pin ${JSON.stringify(this.placement.cornerPin.map((p) => p.map((v) => +v.toFixed(2))))}`);
+        this.placement = null;
+        this.btn.accept.disabled = true;
+        return;
+      }
+      this.btn.accept.disabled = false;
+      this.say(`mask ${b.x1 - b.x0}×${b.y1 - b.y0} px in camera${this.sweep.refined ? ', mapped from dots on the mask' : ' (coarse mapping only)'}. Check the projection, then Accept.`);
+      this.preview();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.say(msg, true);
+      this.hooks.log('err', `calibration: ${msg}`);
+    } finally {
+      this.busy = false;
+    }
   }
 
   /** Apply the placement to the live config so the projector shows it; Accept keeps it, Undo reverts. */
@@ -251,16 +285,9 @@ export class CalibrationUI {
     this.say('reverted to the previous mapping.');
   }
 
-  /** Re-run the mask search for the last tap (also from the tolerance slider). */
+  /** Tolerance slider: re-grow the mask with the current mapping, no new sweep. */
   retune(): void {
-    if (!this.lastTap || !this.sweep) return;
-    try {
-      this.place();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      this.say(msg, true);
-      this.hooks.log('err', `calibration: ${msg}`);
-    }
+    void this.placeFromTap(false);
   }
 
   destroy(): void {
