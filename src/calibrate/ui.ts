@@ -74,10 +74,12 @@ export class CalibrationUI {
 
   show(): void {
     this.el.classList.add('on');
+    document.body.classList.add('cal');
   }
 
   hide(): void {
     this.el.classList.remove('on');
+    document.body.classList.remove('cal');
     this.hooks.setFrame(null);
   }
 

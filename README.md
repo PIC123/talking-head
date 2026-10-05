@@ -123,7 +123,7 @@ Config autosaves to localStorage 500 ms after any change and restores on reload.
 
 ## On a phone
 
-The same URL works on a phone or tablet: tap Start, then hold a finger anywhere on the screen to talk. Editing is still possible (the panel is cramped) but the phone is mainly a handy way to demo the agent without the projector. iOS ignores fullscreen requests; add the page to the home screen for a full-screen face.
+The same URL works on a phone or tablet: tap Start, then hold a finger on the face (anywhere below the top 15% of the screen) to talk; the top strip is reserved for the calibration menu's corner hotspot. Editing is still possible (the panel is cramped) but the phone is mainly a handy way to demo the agent without the projector. iOS ignores fullscreen requests; add the page to the home screen for a full-screen face.
 
 ## Aligning to the mask
 
@@ -139,7 +139,7 @@ The same URL works on a phone or tablet: tap Start, then hold a finger anywhere 
 When the face runs on a phone whose screen is mirrored to the projector, the phone's rear camera can do the mapping for you. No markers or printed patterns are needed.
 
 1. Mirror the phone to the projector and open the face page on it. Tap Start.
-2. Tap the top-right corner of the screen (a near-invisible 44 px hotspot; press C on a keyboard) to open the **Auto calibration** menu.
+2. Tap the top-right corner of the screen (a near-invisible 72 px hotspot; press C on a keyboard) to open the **Auto calibration** menu.
 3. **Camera on**, then hold the phone still with the whole mask in the picture, roughly from where the projector is. Dim the room if you can.
 4. **Sweep**: the projector flashes 16 white dots one by one against black (about eight seconds). The camera finds each dot and fits the projector-to-camera mapping. Every control is hidden while the dots show, since the phone screen is the projection.
 5. The menu then shows the mask lit flat white. **Tap the middle of the mask** in that picture. A colour region grow finds the mask outline (adjust *mask colour tolerance* if it spills onto the wall or stops short). The face is placed live on the projector so you can check it.

@@ -118,10 +118,14 @@ function toggleCalibration(): void {
   });
   cal.toggle();
 }
-document.getElementById('hot')!.addEventListener('click', (e) => {
+// The hotspot acts on the touch itself (not a synthesized click) so it wins over touch-to-talk.
+const hot = document.getElementById('hot')!;
+hot.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
   e.stopPropagation();
   toggleCalibration();
 });
+hot.addEventListener('click', (e) => e.stopPropagation());
 
 /** Once a control tab is driving, keep the panel off the projection; handles and HUD still show. */
 function showPanel(on: boolean): void {
@@ -359,9 +363,13 @@ window.addEventListener('blur', () => {
 // Pointer-based talk: hold the right mouse button (presenter clicker), or on a touch screen
 // hold a finger anywhere in show mode. Edit mode keeps touch free for the panel and handles.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
+// The top strip of the screen is reserved for the menu hotspot (and, on phones, the browser bar),
+// so a finger there never starts a turn.
+const TALK_DEAD_TOP = 0.15;
 const isTouchTalk = (e: PointerEvent) =>
   e.pointerType === 'touch' &&
   !editMode &&
+  e.clientY > window.innerHeight * TALK_DEAD_TOP &&
   !(e.target as HTMLElement | null)?.closest('button, #start, #debugbar, #panel, #log, #cal, #hot, .handle');
 window.addEventListener('pointerdown', (e) => {
   if (e.button === 2 || isTouchTalk(e)) {

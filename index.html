@@ -82,8 +82,8 @@
       }
       body.control #banner { display: block; }
       /* Auto-calibration menu (phone mirrored to the projector) and the near-invisible hotspot that restores it. */
-      #hot { position: absolute; top: 0; right: 0; width: 44px; height: 44px; z-index: 30; opacity: 0.03; background: #fff; border-radius: 0 0 0 8px; }
-      body.control #hot, body.debug #hot, body.edit #hot { display: none; }
+      #hot { position: absolute; top: 0; right: 0; width: 72px; height: 72px; z-index: 30; opacity: 0.03; background: #fff; border-radius: 0 0 0 12px; touch-action: none; }
+      body.control #hot, body.debug #hot, body.edit #hot, body.cal #hot { display: none; }
       #cal {
         position: absolute; left: 8px; right: 8px; top: 8px; z-index: 25; display: none; max-height: calc(100vh - 16px); overflow: auto;
         background: rgba(10,10,10,0.92); border: 1px solid #444; border-radius: 10px; padding: 10px 12px; font: 14px system-ui, sans-serif; color: #eee;
