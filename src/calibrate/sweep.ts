@@ -32,6 +32,8 @@ export interface Placement {
   coded: number;
   /** |correlation| between camera axes and projector axes; low values mean a rotated or noisy scan. */
   axisFit: number;
+  /** Where the mask sits in the projector frame (normalised). */
+  rect: { x0: number; y0: number; x1: number; y1: number };
 }
 
 /**
@@ -148,7 +150,7 @@ function corr(xs: Float32Array, ys: Float32Array): number {
  * is handled. Assumes the projector faces the mask roughly square-on, which the rig does; the
  * camera can be anywhere it sees the mask.
  */
-export function placeFace(scan: ScanResult, region: Region, W: number, H: number): Placement {
+export function placeFace(scan: ScanResult, region: Region, W: number, H: number, size = 1): Placement {
   const us: number[] = [], vs: number[] = [], xs: number[] = [], ys: number[] = [];
   const w = scan.width;
   for (let i = 0; i < region.mask.length; i++) {
@@ -159,6 +161,11 @@ export function placeFace(scan: ScanResult, region: Region, W: number, H: number
   const U = Float32Array.from(us).sort(), V = Float32Array.from(vs).sort();
   const pad = 0.5 / (1 << BITS);
   const rect = { x0: percentile(U, 0.02) - pad, x1: percentile(U, 0.98) + pad, y0: percentile(V, 0.02) - pad, y1: percentile(V, 0.98) + pad };
+  // Optional manual size trim, about the mask centre.
+  if (size !== 1) {
+    const cx = (rect.x0 + rect.x1) / 2, cy = (rect.y0 + rect.y1) / 2, hw = ((rect.x1 - rect.x0) / 2) * size, hh = ((rect.y1 - rect.y0) / 2) * size;
+    rect.x0 = cx - hw; rect.x1 = cx + hw; rect.y0 = cy - hh; rect.y1 = cy + hh;
+  }
   const cxu = corr(Float32Array.from(xs), Float32Array.from(us)), cyv = corr(Float32Array.from(ys), Float32Array.from(vs));
   const cxv = corr(Float32Array.from(xs), Float32Array.from(vs)), cyu = corr(Float32Array.from(ys), Float32Array.from(us));
   const axisFit = Math.min(Math.abs(cxu), Math.abs(cyv));
@@ -182,5 +189,5 @@ export function placeFace(scan: ScanResult, region: Region, W: number, H: number
     rx: ((box.x1 - box.x0) / 2) * 1.12,
     ry: ((box.y1 - box.y0) / 2) * 1.08,
   };
-  return { cornerPin, ellipse, flipH, flipV, coded: us.length, axisFit };
+  return { cornerPin, ellipse, flipH, flipV, coded: us.length, axisFit, rect };
 }

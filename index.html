@@ -102,22 +102,21 @@
       .cal-row button:disabled { opacity: 0.35; }
       .cal-minor button { padding: 8px; font-size: 13px; color: #aaa; }
       .cal-pic { position: relative; margin: 6px 0; }
-      #cal-video { display: none; width: 100%; max-height: 42vh; object-fit: contain; border-radius: 6px; background: #000; }
-      #cal.live #cal-video { display: block; }
-      #cal.lit #cal-video { display: none; }
-      #cal-pic { display: none; border-radius: 6px; touch-action: pan-y; }
+      /* The video element only feeds the frame grabs; the preview canvas shows what the detector sees. */
+      #cal-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+      #cal-pic { display: none; border-radius: 6px; touch-action: pan-y; background: #000; }
       /* Landscape phone: controls left, picture right, so nothing needs scrolling. */
       @media (orientation: landscape) and (max-height: 600px) {
         #cal { display: none; grid-template-columns: 1fr 1fr; column-gap: 12px; align-content: start; }
         #cal.on { display: grid; }
         .cal-head, .cal-status { grid-column: 1 / -1; }
-        .cal-row, .cal-tol { grid-column: 1; }
-        .cal-pic { grid-column: 2; grid-row: 3 / span 4; align-self: start; }
+        .cal-row, .cal-tol, .cal-zoom { grid-column: 1; }
+        .cal-pic { grid-column: 2; grid-row: 3 / span 6; align-self: start; }
       }
-      #cal.lit #cal-pic { display: block; }
-      .cal-tol { display: none; font-size: 12px; color: #aaa; }
-      #cal.lit .cal-tol { display: flex; flex-direction: column; gap: 4px; }
-      .cal-tol input { width: 100%; }
+      #cal.live #cal-pic, #cal.lit #cal-pic { display: block; }
+      .cal-tol, .cal-zoom { display: none; font-size: 12px; color: #aaa; }
+      #cal.live .cal-zoom, #cal.lit .cal-tol { display: flex; flex-direction: column; gap: 4px; }
+      .cal-tol input, .cal-zoom input { width: 100%; }
       body.control #hud { bottom: auto; top: 36px; }
       body.control #log { bottom: auto; top: 36px; right: auto; left: 12px; max-height: 30vh; width: 340px; margin-top: 60px; }
     </style>
@@ -135,6 +134,7 @@
         <button id="dbg-run" type="button">Run checks</button>
         <button id="dbg-copy" type="button">Copy log</button>
         <button id="dbg-reconnect" type="button">Reconnect</button>
+        <button id="dbg-cal" type="button">Calibrate</button>
       </div>
       <div id="hud"></div>
       <div id="log"></div>

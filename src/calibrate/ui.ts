@@ -13,6 +13,8 @@ export interface CalibrationHooks {
   onToggleEdit: () => void;
   /** Re-enter fullscreen (the camera permission prompt throws the browser out of it). */
   ensureFullscreen: () => Promise<void>;
+  /** Exit-and-re-enter fullscreen; resolves to a status line for the menu. */
+  forceFullscreen: () => Promise<string>;
 }
 
 /**
@@ -26,10 +28,12 @@ export class CalibrationUI {
   private pic: HTMLCanvasElement;
   private status: HTMLDivElement;
   private tolInput: HTMLInputElement;
+  private sizeInput!: HTMLInputElement;
   private cam: CameraFeed | null = null;
   private scan: ScanResult | null = null;
   private placement: Placement | null = null;
   private busy = false;
+  private fsPending: Promise<void> = Promise.resolve();
   private before: string | null = null;
   private btn: Record<string, HTMLButtonElement> = {};
 
@@ -48,7 +52,9 @@ export class CalibrationUI {
         <button data-act="undo" disabled>Undo</button>
       </div>
       <div class="cal-pic"><video id="cal-video" playsinline muted></video><canvas id="cal-pic"></canvas></div>
+      <label class="cal-zoom">camera zoom <span id="cal-zoom-v">1x</span> <input id="cal-zoom" type="range" min="1" max="4" step="0.25" value="1"></label>
       <label class="cal-tol">mask colour tolerance <input id="cal-tol" type="range" min="25" max="140" value="60"></label>
+      <label class="cal-tol">face size <span id="cal-size-v">100%</span> <input id="cal-size" type="range" min="60" max="150" step="2" value="100"></label>
       <div class="cal-row cal-minor">
         <button data-act="fullscreen">Fullscreen</button>
         <button data-act="edit">Edit panel</button>
@@ -77,13 +83,19 @@ export class CalibrationUI {
     });
     this.pic.addEventListener('pointercancel', () => (down = null));
     this.tolInput.addEventListener('change', () => this.retune());
+    this.sizeInput = this.el.querySelector<HTMLInputElement>('#cal-size')!;
+    this.sizeInput.addEventListener('input', () => (this.el.querySelector('#cal-size-v')!.textContent = `${this.sizeInput.value}%`));
+    this.sizeInput.addEventListener('change', () => this.placeFromTap());
+    const zoomInput = this.el.querySelector<HTMLInputElement>('#cal-zoom')!;
+    zoomInput.addEventListener('change', () => void this.setZoom(Number(zoomInput.value)));
+    zoomInput.addEventListener('input', () => (this.el.querySelector('#cal-zoom-v')!.textContent = `${Number(zoomInput.value).toFixed(2).replace(/\.?0+$/, '')}x`));
     // Outside #stage: the stage disables touch gestures for push-to-talk, and that setting also
     // applies to everything inside it, which would make this menu impossible to scroll on a phone.
     document.body.appendChild(this.el);
     // Any completed tap in the menu is a user gesture: use it to get back into fullscreen if it was
     // lost. (On touch screens only click/pointerup count as activation, not pointerdown.)
     this.el.addEventListener('click', (e) => {
-      if (!(e.target as HTMLElement).closest('.cal-x')) void this.hooks.ensureFullscreen();
+      if (!(e.target as HTMLElement).closest('.cal-x, [data-act="fullscreen"]')) this.fsPending = this.hooks.ensureFullscreen();
     }, { capture: true });
   }
 
@@ -116,9 +128,9 @@ export class CalibrationUI {
     // Every button tap is a user gesture: use it to get back into fullscreen, which the camera
     // permission prompt (and some phones' tab switches) drop us out of. If that changes the
     // viewport, let the resize settle first so the patterns are projected at the final size.
-    if (what !== 'close') {
+    if (what !== 'close' && what !== 'fullscreen') {
       const was = !!document.fullscreenElement;
-      await this.hooks.ensureFullscreen();
+      await this.fsPending; // requested by the click handler above
       if (!was && document.fullscreenElement) await sleep(500);
     }
     try {
@@ -138,9 +150,11 @@ export class CalibrationUI {
         case 'undo':
           this.undo();
           break;
-        case 'fullscreen':
-          this.say(document.fullscreenElement ? 'fullscreen' : 'fullscreen not available here (iPhone: add the page to the home screen)');
+        case 'fullscreen': {
+          const r = await this.hooks.forceFullscreen();
+          this.say(r);
           break;
+        }
         case 'edit':
           this.hooks.onToggleEdit();
           break;
@@ -170,8 +184,33 @@ export class CalibrationUI {
     await this.hooks.ensureFullscreen();
     this.el.classList.add('live');
     this.btn.sweep.disabled = false;
-    this.say(`camera: ${this.cam.label || 'ready'}. Frame the whole mask, keep the phone still, then Scan.`);
-    this.hooks.log('info', `calibration camera: ${this.cam.label || 'unknown'}`);
+    this.say(`camera: ${this.cam.label || 'ready'}. Zoom until the mask fills most of the picture, keep the phone still, then Scan.`);
+    this.hooks.log('info', `calibration camera: ${this.cam.label || 'unknown'} ${this.cam.sourceSize}`);
+    this.startPreview();
+  }
+
+  private previewTimer = 0;
+  /** Live preview of exactly what the detector sees (zoom and crop included), ~8 fps. */
+  private startPreview(): void {
+    window.clearInterval(this.previewTimer);
+    this.previewTimer = window.setInterval(() => {
+      if (!this.cam || !this.visible || this.busy || this.el.classList.contains('lit')) return;
+      this.sizePic();
+      this.cam.preview(this.pic.getContext('2d')!, this.pic.width, this.pic.height);
+    }, 125);
+  }
+
+  private async setZoom(z: number): Promise<void> {
+    if (!this.cam) return;
+    const how = await this.cam.setZoom(z);
+    if (this.scan) {
+      this.scan = null;
+      this.placement = null;
+      this.el.classList.remove('lit');
+      this.btn.accept.disabled = true;
+      this.say(`zoom ${z}x (${how}). Scan again.`);
+    } else this.say(`zoom ${z}x (${how}). Frame the mask, then Scan.`);
+    this.hooks.log('info', `camera zoom ${z}x: ${how}`);
   }
 
   private async doSweep(): Promise<void> {
@@ -204,15 +243,25 @@ export class CalibrationUI {
     return this.pic.width / (this.cam?.width ?? 320);
   }
 
-  private redrawPic(region: Region | null = null): void {
-    if (!this.scan || !this.cam) return;
+  /** Size the picture to fit its box at the camera aspect, so taps map 1:1 onto camera pixels. */
+  private sizePic(): void {
+    if (!this.cam) return;
     const w = this.cam.width, h = this.cam.height;
     const boxW = this.pic.parentElement!.clientWidth || this.el.clientWidth - 24;
     const cssW = Math.max(120, Math.min(boxW, 480, (window.innerHeight * 0.42 * w) / h));
-    this.pic.width = Math.round(cssW);
-    this.pic.height = Math.round((cssW * h) / w);
-    this.pic.style.width = `${this.pic.width}px`;
-    this.pic.style.height = `${this.pic.height}px`;
+    const pw = Math.round(cssW), ph = Math.round((cssW * h) / w);
+    if (this.pic.width !== pw || this.pic.height !== ph) {
+      this.pic.width = pw;
+      this.pic.height = ph;
+      this.pic.style.width = `${pw}px`;
+      this.pic.style.height = `${ph}px`;
+    }
+  }
+
+  private redrawPic(region: Region | null = null): void {
+    if (!this.scan || !this.cam) return;
+    const w = this.cam.width, h = this.cam.height;
+    this.sizePic();
     const g = this.pic.getContext('2d')!;
     const tmp = document.createElement('canvas');
     tmp.width = w;
@@ -252,11 +301,12 @@ export class CalibrationUI {
       this.region = findMask(this.scan, this.lastTap, Number(this.tolInput.value));
       this.redrawPic(this.region);
       const { W, H } = this.hooks.outputSize();
-      this.placement = placeFace(this.scan, this.region, W, H);
+      this.placement = placeFace(this.scan, this.region, W, H, Number(this.sizeInput.value) / 100);
       const p = this.placement, b = this.region.bbox;
-      this.hooks.log('info', `mask ${b.x1 - b.x0}×${b.y1 - b.y0} px, ${p.coded} coded pixels, axis fit ${p.axisFit.toFixed(2)}, flip ${p.flipH ? 'H' : '-'}${p.flipV ? 'V' : '-'}, pin ${JSON.stringify(p.cornerPin.map((q) => q.map((v) => +v.toFixed(3))))}`);
+      const pct = (v: number) => `${Math.round(v * 100)}%`;
+      this.hooks.log('info', `mask ${b.x1 - b.x0}×${b.y1 - b.y0} px in camera (${p.coded} coded), in projector frame x ${pct(p.rect.x0)}–${pct(p.rect.x1)} y ${pct(p.rect.y0)}–${pct(p.rect.y1)}, axis fit ${p.axisFit.toFixed(2)}, flip ${p.flipH ? 'H' : '-'}${p.flipV ? 'V' : '-'}, pin ${JSON.stringify(p.cornerPin.map((q) => q.map((v) => +v.toFixed(3))))}`);
       this.btn.accept.disabled = false;
-      this.say(`mask found (${p.coded} coded pixels${p.axisFit < 0.6 ? ', weak scan: check the result carefully' : ''}). Look at the projection, adjust the tolerance if the outline is wrong, then Accept.`);
+      this.say(`mask found: ${Math.round((p.rect.x1 - p.rect.x0) * 100)}% × ${Math.round((p.rect.y1 - p.rect.y0) * 100)}% of the projector frame (${p.coded} coded pixels${p.axisFit < 0.6 ? ', weak scan' : ''}). Check the projection, adjust the tolerance if the outline is wrong, then Accept.`);
       this.preview();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

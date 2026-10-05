@@ -7,7 +7,7 @@ import { OutputStage } from './mapping/output';
 import { MappingEditor, type Stage } from './mapping/editor';
 import { createLog } from './ui/log';
 import { createPanel } from './ui/panel';
-import { ensureFullscreen, keepAwake, requestFullscreen, showStartOverlay } from './ui/start';
+import { ensureFullscreen, forceFullscreen, keepAwake, requestFullscreen, showStartOverlay } from './ui/start';
 import { Underlay } from './ui/underlay';
 import { Sync } from './sync';
 import { copyLog, runDiagnostics } from './ui/diagnostics';
@@ -115,7 +115,8 @@ function toggleCalibration(): void {
     outputSize: () => ({ W: out.width, H: out.height }),
     log,
     onToggleEdit: () => setEditMode(!editMode),
-    ensureFullscreen: () => (params.has('windowed') ? Promise.resolve() : ensureFullscreen()),
+    ensureFullscreen: () => (params.has('windowed') ? Promise.resolve() : ensureFullscreen((t) => log('info', t))),
+    forceFullscreen: () => (params.has('windowed') ? Promise.resolve('windowed mode (?windowed)') : forceFullscreen((t) => log('info', t))),
   });
   cal.toggle();
   (window as unknown as { th: { cal: unknown } }).th.cal = cal;
@@ -453,6 +454,7 @@ if (isDebug) {
     log('info', ok ? 'log copied to clipboard' : 'copy failed; long-press the log to select it');
   });
   document.getElementById('dbg-pause')!.addEventListener('click', togglePause);
+  document.getElementById('dbg-cal')!.addEventListener('click', toggleCalibration);
   document.getElementById('dbg-reconnect')!.addEventListener('click', () => {
     session.rebuild();
     session.pressTalk();

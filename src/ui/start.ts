@@ -43,12 +43,39 @@ export async function requestFullscreen(): Promise<void> {
 }
 
 /** Enter fullscreen if not already in it (never toggles out). Needs a user gesture on most browsers. */
-export async function ensureFullscreen(): Promise<void> {
-  if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+export async function ensureFullscreen(log?: (text: string) => void): Promise<void> {
+  if (document.fullscreenElement || typeof document.documentElement.requestFullscreen !== 'function') return;
   try {
     await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
-  } catch {
-    /* no gesture or unsupported (iOS); ignore */
+  } catch (e) {
+    log?.(`fullscreen refused: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** Looks fullscreen: the viewport is (nearly) the whole screen, whatever the API says. */
+export function looksFullscreen(): boolean {
+  return window.innerHeight >= screen.height - 2 || window.innerWidth >= screen.width - 2 && window.innerHeight >= screen.height * 0.95;
+}
+
+/**
+ * Exit (if the API thinks we are in) and re-enter fullscreen within one user gesture, and report
+ * what happened in a line for the UI. Used by the explicit Fullscreen button.
+ */
+export async function forceFullscreen(log?: (text: string) => void): Promise<string> {
+  const el = document.documentElement;
+  if (typeof el.requestFullscreen !== 'function') return 'fullscreen not available in this browser (iPhone: add the page to the home screen)';
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    await el.requestFullscreen({ navigationUI: 'hide' });
+    await new Promise((r) => setTimeout(r, 300));
+    const ok = looksFullscreen();
+    const line = `fullscreen ${ok ? 'on' : 'requested, but the viewport is still'} ${window.innerWidth}×${window.innerHeight} of ${screen.width}×${screen.height}`;
+    log?.(line);
+    return line;
+  } catch (e) {
+    const line = `fullscreen refused: ${e instanceof Error ? e.message : String(e)}`;
+    log?.(line);
+    return line;
   }
 }
 
